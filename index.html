@@ -27,7 +27,29 @@
     </section>
     <section class="panel" id="panel-transactions" role="tabpanel" hidden>
       <h2>Гүйлгээ</h2>
-      <p class="placeholder">Удахгүй</p>
+
+      <!-- Шүүлтүүрүүд (F7). Хоосон утга = бүгд. -->
+      <div class="filters">
+        <label class="field">Сар
+          <input type="month" id="filter-month">
+        </label>
+        <label class="field">Төрөл
+          <select id="filter-type">
+            <option value="">Бүгд</option>
+            <option value="expense">Зарлага</option>
+            <option value="income">Орлого</option>
+          </select>
+        </label>
+        <label class="field">Ангилал
+          <select id="filter-category"></select>
+        </label>
+        <label class="field filter-search">Хайх
+          <input type="search" id="filter-search" placeholder="Тайлбараас хайх">
+        </label>
+      </div>
+
+      <p id="tx-count" class="muted"></p>
+      <ul id="tx-list" class="tx-list"></ul>
     </section>
     <section class="panel" id="panel-budget" role="tabpanel" hidden>
       <h2>Төсөв</h2>
@@ -38,6 +60,44 @@
       <p class="placeholder">Удахгүй</p>
     </section>
   </main>
+
+  <!-- «+» товч: бүх дэлгэц дээр гүйлгээ нэмэх цонх нээнэ -->
+  <button type="button" id="add-btn" class="fab" aria-label="Гүйлгээ нэмэх">+</button>
+
+  <!-- Гүйлгээ нэмэх / засах цонх (F1, F2) -->
+  <dialog id="tx-dialog" class="dialog">
+    <form id="tx-form" novalidate>
+      <h2 id="tx-dialog-title">Гүйлгээ нэмэх</h2>
+
+      <!-- Орлого / зарлага солих салгуур -->
+      <div class="type-switch" role="radiogroup" aria-label="Төрөл">
+        <label class="expense"><input type="radio" name="type" value="expense" checked><span>Зарлага</span></label>
+        <label class="income"><input type="radio" name="type" value="income"><span>Орлого</span></label>
+      </div>
+
+      <label class="field">Дүн (₮)
+        <input name="amount" class="amount-input" inputmode="numeric" autocomplete="off" placeholder="0">
+      </label>
+      <label class="field">Огноо
+        <input type="date" name="date">
+      </label>
+      <label class="field">Ангилал
+        <select name="categoryId"></select>
+      </label>
+      <label class="field">Тайлбар
+        <input name="note" maxlength="200" autocomplete="off" placeholder="Заавал биш">
+      </label>
+
+      <div id="tx-errors" class="form-errors" role="alert" hidden></div>
+
+      <div class="dialog-actions">
+        <button type="button" id="tx-delete" class="btn btn-danger" hidden>Устгах</button>
+        <span class="spacer"></span>
+        <button type="button" id="tx-cancel" class="btn">Болих</button>
+        <button type="submit" class="btn btn-primary">Хадгалах</button>
+      </div>
+    </form>
+  </dialog>
 
   <script type="module" src="js/app.js"></script>
 </body>
