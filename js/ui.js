@@ -30,7 +30,16 @@ export function renderCategoryOptions(select, categories, { type = '', selectedI
   select.value = exists ? selectedId : select.options[0]?.value ?? '';
 }
 
+// Хураангуйн гурван картыг бөглөнө. Үлдэгдэл сөрөг бол улаан болно.
+export function renderSummaryCards(els, totals) {
+  els.income.textContent = formatMoney(totals.income);
+  els.expense.textContent = formatMoney(totals.expense);
+  els.balance.textContent = formatMoney(totals.balance);
+  els.balance.classList.toggle('negative', totals.balance < 0);
+}
+
 // Гүйлгээний жагсаалтыг зурна. Мөр дээр дарахад onSelect(id) дуудагдана.
+// countEl заавал биш — өгвөл «N гүйлгээ» гэж бичнэ.
 export function renderTransactionList(listEl, countEl, transactions, categories, onSelect) {
   listEl.replaceChildren();
 
@@ -39,11 +48,11 @@ export function renderTransactionList(listEl, countEl, transactions, categories,
     empty.className = 'empty';
     empty.textContent = 'Гүйлгээ алга байна';
     listEl.append(empty);
-    countEl.textContent = '';
+    if (countEl) countEl.textContent = '';
     return;
   }
 
-  countEl.textContent = `${transactions.length} гүйлгээ`;
+  if (countEl) countEl.textContent = `${transactions.length} гүйлгээ`;
 
   // id-аар ангиллыг хурдан олохын тулд Map үүсгэнэ
   const byId = new Map(categories.map((c) => [c.id, c]));

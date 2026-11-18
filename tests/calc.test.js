@@ -9,6 +9,13 @@ import {
   filterTransactions,
   todayISO,
   currentMonth,
+  shiftMonth,
+  formatMonthLabel,
+  formatShortMonth,
+  formatCompactMoney,
+  monthTotals,
+  expenseByCategory,
+  monthlyTrend,
 } from '../js/calc.js';
 import { DEFAULT_CATEGORIES } from '../js/storage.js';
 
@@ -130,4 +137,70 @@ test('todayISO, currentMonth: орон нутгийн огноог зөв хэл
   const date = new Date(2026, 0, 5, 23, 59); // 2026 оны 1-р сарын 5, 23:59
   assert.equal(todayISO(date), '2026-01-05');
   assert.equal(currentMonth(date), '2026-01');
+});
+
+// ===== Сартай ажиллах =====
+test('shiftMonth: оны заагийг зөв давна', () => {
+  assert.equal(shiftMonth('2026-11', 1), '2026-12');
+  assert.equal(shiftMonth('2026-12', 1), '2027-01');
+  assert.equal(shiftMonth('2026-01', -1), '2025-12');
+  assert.equal(shiftMonth('2026-03', -5), '2025-10');
+  assert.equal(shiftMonth('2026-05', 0), '2026-05');
+});
+
+test('formatMonthLabel, formatShortMonth: монгол шошго', () => {
+  assert.equal(formatMonthLabel('2026-11'), '2026 оны 11-р сар');
+  assert.equal(formatMonthLabel('2026-01'), '2026 оны 1-р сар');
+  assert.equal(formatShortMonth('2026-06'), '6-р сар');
+});
+
+test('formatCompactMoney: сая, мянгаар товчилно', () => {
+  assert.equal(formatCompactMoney(0), '0');
+  assert.equal(formatCompactMoney(500), '500');
+  assert.equal(formatCompactMoney(250000), '250 мян');
+  assert.equal(formatCompactMoney(1500000), '1.5 сая');
+  assert.equal(formatCompactMoney(2000000), '2 сая');
+});
+
+// ===== Сарын тооцоо =====
+const monthSample = [
+  tx({ id: '1', type: 'income', categoryId: 'inc-salary', amount: 2000000, date: '2026-11-01' }),  // сарын 1
+  tx({ id: '2', type: 'expense', categoryId: 'exp-food', amount: 300000, date: '2026-11-30' }),    // сарын сүүлийн өдөр
+  tx({ id: '3', type: 'expense', categoryId: 'exp-food', amount: 200000, date: '2026-11-15' }),
+  tx({ id: '4', type: 'expense', categoryId: 'exp-housing', amount: 800000, date: '2026-11-05' }),
+  tx({ id: '5', type: 'expense', categoryId: 'exp-food', amount: 99999, date: '2026-10-31' }),     // өмнөх сар
+  tx({ id: '6', type: 'income', categoryId: 'inc-side', amount: 77777, date: '2026-12-01' }),      // дараагийн сар
+];
+
+test('monthTotals: орлого, зарлага, үлдэгдлийг зөв бодно', () => {
+  assert.deepEqual(monthTotals(monthSample, '2026-11'), {
+    income: 2000000, expense: 1300000, balance: 700000,
+  });
+});
+
+test('monthTotals: өөр сарын гүйлгээ (31-ний, 1-ний өдөр) нийлбэрт орохгүй', () => {
+  assert.deepEqual(monthTotals(monthSample, '2026-10'), { income: 0, expense: 99999, balance: -99999 });
+  assert.deepEqual(monthTotals(monthSample, '2026-12'), { income: 77777, expense: 0, balance: 77777 });
+});
+
+test('monthTotals: гүйлгээгүй сард бүгд 0, зарлага их бол үлдэгдэл сөрөг', () => {
+  assert.deepEqual(monthTotals([], '2026-11'), { income: 0, expense: 0, balance: 0 });
+  assert.equal(monthTotals(monthSample, '2026-10').balance < 0, true);
+});
+
+test('expenseByCategory: ангиллаар нэгтгэж, ихээс бага руу эрэмбэлнэ', () => {
+  const result = expenseByCategory(monthSample, '2026-11', DEFAULT_CATEGORIES);
+  assert.deepEqual(result.map((r) => [r.categoryId, r.amount]), [
+    ['exp-housing', 800000],
+    ['exp-food', 500000],
+  ]);
+  assert.equal(result[1].name, 'Хоол хүнс');
+  assert.deepEqual(expenseByCategory(monthSample, '2027-01', DEFAULT_CATEGORIES), []);
+});
+
+test('monthlyTrend: сүүлийн 6 сар, хуучнаас шинэ рүү, оны заагаар', () => {
+  const trend = monthlyTrend(monthSample, '2027-01');
+  assert.deepEqual(trend.map((t) => t.month), ['2026-08', '2026-09', '2026-10', '2026-11', '2026-12', '2027-01']);
+  assert.deepEqual(trend[3], { month: '2026-11', income: 2000000, expense: 1300000 });
+  assert.deepEqual(trend[0], { month: '2026-08', income: 0, expense: 0 });
 });

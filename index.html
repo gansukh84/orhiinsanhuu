@@ -9,6 +9,12 @@
 <body>
   <header class="app-header">
     <h1>Манай төсөв</h1>
+    <!-- Сар сонгогч: бүх таб энэ сарын өгөгдлийг харуулна -->
+    <div class="month-picker">
+      <button type="button" id="month-prev" class="month-btn" aria-label="Өмнөх сар">‹</button>
+      <span id="month-label" class="month-label" aria-live="polite"></span>
+      <button type="button" id="month-next" class="month-btn" aria-label="Дараагийн сар">›</button>
+    </div>
   </header>
 
   <!-- Таб товчнууд: утсан дээр доод талд, компьютер дээр дээд талд -->
@@ -23,16 +29,38 @@
   <main class="content">
     <section class="panel" id="panel-summary" role="tabpanel">
       <h2>Хураангуй</h2>
-      <p class="placeholder">Удахгүй</p>
+
+      <!-- Сарын нийт дүн (F4) -->
+      <div class="cards">
+        <div class="card">
+          <span class="card-label">Орлого</span>
+          <span id="sum-income" class="card-value income"></span>
+        </div>
+        <div class="card">
+          <span class="card-label">Зарлага</span>
+          <span id="sum-expense" class="card-value expense"></span>
+        </div>
+        <div class="card card-wide">
+          <span class="card-label">Үлдэгдэл</span>
+          <span id="sum-balance" class="card-value"></span>
+        </div>
+      </div>
+
+      <!-- Графикууд (F6) -->
+      <h3>Зарлага ангиллаар</h3>
+      <div id="chart-categories" class="chart"></div>
+
+      <h3>Сүүлийн 6 сар</h3>
+      <div id="chart-trend" class="chart"></div>
+
+      <h3>Сүүлийн гүйлгээ</h3>
+      <ul id="recent-list" class="tx-list"></ul>
     </section>
     <section class="panel" id="panel-transactions" role="tabpanel" hidden>
       <h2>Гүйлгээ</h2>
 
-      <!-- Шүүлтүүрүүд (F7). Хоосон утга = бүгд. -->
+      <!-- Шүүлтүүрүүд (F7). Сарыг дээд талын сар сонгогчоор сонгоно. Хоосон утга = бүгд. -->
       <div class="filters">
-        <label class="field">Сар
-          <input type="month" id="filter-month">
-        </label>
         <label class="field">Төрөл
           <select id="filter-type">
             <option value="">Бүгд</option>

@@ -103,3 +103,86 @@ export function todayISO(date = new Date()) {
 export function currentMonth(date = new Date()) {
   return todayISO(date).slice(0, 7);
 }
+
+// ===== Сартай ажиллах =====
+
+// Сарыг delta-аар шилжүүлнэ. Жишээ: shiftMonth("2026-01", -1) → "2025-12"
+// Санаа: сарыг «нийт хэдэн сар» болгоод нэмж хасаад, буцааж он-сар болгоно.
+export function shiftMonth(month, delta) {
+  const [y, m] = month.split('-').map(Number);
+  const total = y * 12 + (m - 1) + delta;
+  const year = Math.floor(total / 12);
+  const mon = (total % 12) + 1;
+  return `${year}-${String(mon).padStart(2, '0')}`;
+}
+
+// "2026-11" → "2026 оны 11-р сар"
+export function formatMonthLabel(month) {
+  const [y, m] = month.split('-').map(Number);
+  return `${y} оны ${m}-р сар`;
+}
+
+// "2026-11" → "11-р сар" (графикийн богино шошго)
+export function formatShortMonth(month) {
+  return `${Number(month.split('-')[1])}-р сар`;
+}
+
+// Графикийн тэнхлэгт зориулсан товч дүн: 1500000 → "1.5 сая", 250000 → "250 мян"
+export function formatCompactMoney(amount) {
+  if (amount >= 1_000_000) {
+    return `${Number((amount / 1_000_000).toFixed(1))} сая`;
+  }
+  if (amount >= 1_000) {
+    return `${Math.round(amount / 1_000)} мян`;
+  }
+  return String(amount);
+}
+
+// ===== Сарын тооцоо (F4, F6) =====
+
+// Тухайн сарын нийт орлого, зарлага, үлдэгдэл
+export function monthTotals(transactions, month) {
+  let income = 0;
+  let expense = 0;
+  for (const tx of transactions) {
+    if (!tx.date.startsWith(`${month}-`)) continue;  // Өөр сарын гүйлгээг алгасна
+    if (tx.type === 'income') income += tx.amount;
+    else if (tx.type === 'expense') expense += tx.amount;
+  }
+  return { income, expense, balance: income - expense };
+}
+
+// Тухайн сарын зарлагыг ангиллаар нэгтгэнэ — ихээс бага руу эрэмбэлсэн.
+// Буцаах: [{ categoryId, name, color, amount }]
+export function expenseByCategory(transactions, month, categories) {
+  const sums = new Map();
+  for (const tx of transactions) {
+    if (tx.type !== 'expense' || !tx.date.startsWith(`${month}-`)) continue;
+    sums.set(tx.categoryId, (sums.get(tx.categoryId) || 0) + tx.amount);
+  }
+
+  const byId = new Map(categories.map((c) => [c.id, c]));
+  return [...sums.entries()]
+    .map(([categoryId, amount]) => {
+      const category = byId.get(categoryId);
+      return {
+        categoryId,
+        name: category?.name || 'Тодорхойгүй ангилал',
+        color: category?.color || '#9e9e9e',
+        amount,
+      };
+    })
+    .sort((a, b) => b.amount - a.amount);
+}
+
+// endMonth хүртэлх сүүлийн count сарын орлого, зарлага (хуучнаас шинэ рүү).
+// Буцаах: [{ month, income, expense }]
+export function monthlyTrend(transactions, endMonth, count = 6) {
+  const result = [];
+  for (let i = count - 1; i >= 0; i--) {
+    const month = shiftMonth(endMonth, -i);
+    const { income, expense } = monthTotals(transactions, month);
+    result.push({ month, income, expense });
+  }
+  return result;
+}

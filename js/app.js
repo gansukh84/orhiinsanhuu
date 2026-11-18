@@ -1,13 +1,26 @@
 // Аппын эхлэх цэг: өгөгдөл ачаалах, таб солих, гүйлгээ нэмэх/засах/устгах.
 import { loadData, saveData, hasStoredData } from './storage.js';
-import { parseAmount, validateTransaction, filterTransactions, todayISO, currentMonth } from './calc.js';
+import {
+  parseAmount,
+  validateTransaction,
+  filterTransactions,
+  todayISO,
+  currentMonth,
+  shiftMonth,
+  formatMonthLabel,
+  monthTotals,
+  expenseByCategory,
+  monthlyTrend,
+} from './calc.js';
 import {
   renderCategoryOptions,
   renderTransactionList,
+  renderSummaryCards,
   fillTransactionForm,
   readTransactionForm,
   showFormErrors,
 } from './ui.js';
+import { renderCategoryChart, renderTrendChart } from './charts.js';
 
 // ===== 1. Өгөгдөл ачаалах (F9) =====
 // Анх удаа нээж байвал анхны ангиллуудтай өгөгдлийг шууд хадгална.
@@ -50,16 +63,44 @@ tabButtons.forEach((btn) => {
   btn.addEventListener('click', () => showTab(btn.dataset.tab));
 });
 
-// ===== 3. Гүйлгээний жагсаалт ба шүүлт (F7) =====
-const filterMonth = document.getElementById('filter-month');
+// ===== 3. Сар сонгогч =====
+// Бүх таб энэ сарын өгөгдлийг харуулна. Анхдаа одоогийн сар.
+let selectedMonth = currentMonth();
+
+function setMonth(month) {
+  selectedMonth = month;
+  renderAll();
+}
+
+document.getElementById('month-prev').addEventListener('click', () => setMonth(shiftMonth(selectedMonth, -1)));
+document.getElementById('month-next').addEventListener('click', () => setMonth(shiftMonth(selectedMonth, 1)));
+
+// ===== 4. Хураангуй ба график (F4, F6) =====
+const summaryCards = {
+  income: document.getElementById('sum-income'),
+  expense: document.getElementById('sum-expense'),
+  balance: document.getElementById('sum-balance'),
+};
+
+function renderSummary() {
+  renderSummaryCards(summaryCards, monthTotals(data.transactions, selectedMonth));
+  renderCategoryChart(
+    document.getElementById('chart-categories'),
+    expenseByCategory(data.transactions, selectedMonth, data.categories)
+  );
+  renderTrendChart(document.getElementById('chart-trend'), monthlyTrend(data.transactions, selectedMonth, 6));
+
+  // Сонгосон сарын сүүлийн 5 гүйлгээ
+  const recent = filterTransactions(data.transactions, { month: selectedMonth }).slice(0, 5);
+  renderTransactionList(document.getElementById('recent-list'), null, recent, data.categories, openEditDialog);
+}
+
+// ===== 5. Гүйлгээний жагсаалт ба шүүлт (F7) =====
 const filterType = document.getElementById('filter-type');
 const filterCategory = document.getElementById('filter-category');
 const filterSearch = document.getElementById('filter-search');
 const txList = document.getElementById('tx-list');
 const txCount = document.getElementById('tx-count');
-
-// Анхдаа энэ сарын гүйлгээг харуулна
-filterMonth.value = currentMonth();
 
 // Ангиллын шүүлтүүрийг сонгосон төрөлд тааруулж дахин дүүргэнэ
 function refreshFilterCategories() {
@@ -73,7 +114,7 @@ function refreshFilterCategories() {
 // Шүүлтүүрийн дагуу жагсаалтыг дахин зурна
 function renderList() {
   const filtered = filterTransactions(data.transactions, {
-    month: filterMonth.value,
+    month: selectedMonth,
     type: filterType.value,
     categoryId: filterCategory.value,
     search: filterSearch.value,
@@ -85,11 +126,17 @@ filterType.addEventListener('change', () => {
   refreshFilterCategories();
   renderList();
 });
-filterMonth.addEventListener('change', renderList);
 filterCategory.addEventListener('change', renderList);
 filterSearch.addEventListener('input', renderList);  // Бичих бүрт шууд хайна
 
-// ===== 4. Гүйлгээ нэмэх / засах / устгах цонх (F1, F2) =====
+// Сар, хураангуй, жагсаалт — бүгдийг дахин зурна
+function renderAll() {
+  document.getElementById('month-label').textContent = formatMonthLabel(selectedMonth);
+  renderSummary();
+  renderList();
+}
+
+// ===== 6. Гүйлгээ нэмэх / засах / устгах цонх (F1, F2) =====
 const dialog = document.getElementById('tx-dialog');
 const form = document.getElementById('tx-form');
 let editingId = null;  // null = шинэ гүйлгээ, эс бөгөөс засаж буй гүйлгээний id
@@ -143,12 +190,10 @@ form.addEventListener('submit', (event) => {
   }
   persist();
 
-  // Шүүлтийн сар өөр байвал хадгалсан гүйлгээ харагдахаар сарыг солино
-  if (filterMonth.value && !values.date.startsWith(filterMonth.value)) {
-    filterMonth.value = values.date.slice(0, 7);
-  }
+  // Гүйлгээ өөр сард бол тэр сар руу шилжинэ — хадгалсан гүйлгээ шууд харагдана
+  selectedMonth = values.date.slice(0, 7);
   dialog.close();
-  renderList();
+  renderAll();  // Жагсаалт ба хураангуй хоёулаа шинэчлэгдэнэ (F1)
 });
 
 // Устгах — баталгаажуулсны дараа
@@ -158,9 +203,9 @@ document.getElementById('tx-delete').addEventListener('click', () => {
   data.transactions = data.transactions.filter((t) => t.id !== editingId);
   persist();
   dialog.close();
-  renderList();
+  renderAll();
 });
 
-// ===== 5. Эхний зураг =====
+// ===== 7. Эхний зураг =====
 refreshFilterCategories();
-renderList();
+renderAll();
