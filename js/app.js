@@ -11,11 +11,21 @@ import {
   monthTotals,
   expenseByCategory,
   monthlyTrend,
+  budgetRows,
+  setBudget,
+  copyBudgets,
+  validateCategoryName,
+  countCategoryTransactions,
+  pickCategoryColor,
 } from './calc.js';
 import {
   renderCategoryOptions,
   renderTransactionList,
   renderSummaryCards,
+  renderBudgetList,
+  renderBudgetAlerts,
+  renderCategoryManager,
+  showCategoryError,
   fillTransactionForm,
   readTransactionForm,
   showFormErrors,
@@ -84,6 +94,10 @@ const summaryCards = {
 
 function renderSummary() {
   renderSummaryCards(summaryCards, monthTotals(data.transactions, selectedMonth));
+  renderBudgetAlerts(
+    document.getElementById('budget-alerts'),
+    budgetRows(data.transactions, data.categories, data.budgets, selectedMonth)
+  );
   renderCategoryChart(
     document.getElementById('chart-categories'),
     expenseByCategory(data.transactions, selectedMonth, data.categories)
@@ -129,14 +143,124 @@ filterType.addEventListener('change', () => {
 filterCategory.addEventListener('change', renderList);
 filterSearch.addEventListener('input', renderList);  // Бичих бүрт шууд хайна
 
-// Сар, хураангуй, жагсаалт — бүгдийг дахин зурна
-function renderAll() {
-  document.getElementById('month-label').textContent = formatMonthLabel(selectedMonth);
-  renderSummary();
-  renderList();
+// ===== 6. Төсөв (F5) =====
+function renderBudget() {
+  renderBudgetList(
+    document.getElementById('budget-list'),
+    document.getElementById('budget-total'),
+    budgetRows(data.transactions, data.categories, data.budgets, selectedMonth),
+    onLimitChange
+  );
 }
 
-// ===== 6. Гүйлгээ нэмэх / засах / устгах цонх (F1, F2) =====
+// Хэрэглэгч ангиллын хязгаарыг өөрчлөхөд
+function onLimitChange(categoryId, text) {
+  let limit = null;  // Хоосон бол төсвийг арилгана
+  if (text.trim() !== '') {
+    limit = parseAmount(text);
+    if (limit === null) {
+      alert('Төсөв 0-ээс их бүхэл тоо байх ёстой.');
+      renderBudget();  // Буруу утгыг арилгаж, өмнөх утгыг сэргээнэ
+      return;
+    }
+  }
+  data.budgets = setBudget(data.budgets, categoryId, selectedMonth, limit);
+  persist();
+  renderAll();
+}
+
+// «Өмнөх сарын төсвийг хуулах»
+document.getElementById('copy-budget').addEventListener('click', () => {
+  const prevMonth = shiftMonth(selectedMonth, -1);
+  const prevCount = data.budgets.filter((b) => b.month === prevMonth).length;
+  if (prevCount === 0) {
+    alert(`${formatMonthLabel(prevMonth)}д төсөв тавиагүй байна.`);
+    return;
+  }
+  const hasCurrent = data.budgets.some((b) => b.month === selectedMonth);
+  if (hasCurrent && !confirm('Энэ сарын төсөв өмнөх сарынхаар солигдоно. Үргэлжлүүлэх үү?')) {
+    return;
+  }
+  data.budgets = copyBudgets(data.budgets, prevMonth, selectedMonth).budgets;
+  persist();
+  renderAll();
+});
+
+// ===== 7. Ангилал удирдах (F3) =====
+const categoryForm = document.getElementById('category-form');
+const categoryError = document.getElementById('category-error');
+
+function renderSettings() {
+  const counts = new Map(
+    data.categories.map((c) => [c.id, countCategoryTransactions(data.transactions, c.id)])
+  );
+  renderCategoryManager(
+    {
+      expense: document.getElementById('category-list-expense'),
+      income: document.getElementById('category-list-income'),
+    },
+    data.categories,
+    counts,
+    { onRename: renameCategory, onDelete: deleteCategory }
+  );
+}
+
+// Шинэ ангилал нэмэх
+categoryForm.addEventListener('submit', (event) => {
+  event.preventDefault();
+  const type = categoryForm.elements.type.value;
+  const name = categoryForm.elements.name.value.trim();
+  const error = validateCategoryName(name, type, data.categories);
+  if (error) {
+    showCategoryError(categoryError, error);
+    return;
+  }
+  data.categories.push({ id: makeId(), name, type, color: pickCategoryColor(data.categories) });
+  persist();
+  categoryForm.elements.name.value = '';
+  showCategoryError(categoryError, '');
+  renderAll();
+});
+
+// Нэр солих
+function renameCategory(category) {
+  const newName = prompt('Ангиллын шинэ нэр:', category.name);
+  if (newName === null) return;  // «Болих» дарсан
+  const error = validateCategoryName(newName, category.type, data.categories, category.id);
+  if (error) {
+    alert(error);
+    return;
+  }
+  category.name = newName.trim();
+  persist();
+  renderAll();
+}
+
+// Устгах — гүйлгээтэй бол зөвшөөрөхгүй
+function deleteCategory(category) {
+  const count = countCategoryTransactions(data.transactions, category.id);
+  if (count > 0) {
+    alert(`«${category.name}» ангилалд ${count} гүйлгээ байгаа тул устгах боломжгүй. Эхлээд гүйлгээнүүдийг өөр ангилал руу шилжүүлэх эсвэл устгана уу.`);
+    return;
+  }
+  if (!confirm(`«${category.name}» ангиллыг устгах уу?`)) return;
+  data.categories = data.categories.filter((c) => c.id !== category.id);
+  data.budgets = data.budgets.filter((b) => b.categoryId !== category.id);  // Төсөв нь хамт устана
+  persist();
+  renderAll();
+}
+
+// Сар, хураангуй, жагсаалт, төсөв, тохиргоо — бүгдийг дахин зурна
+function renderAll() {
+  document.getElementById('month-label').textContent = formatMonthLabel(selectedMonth);
+  refreshFilterCategories();  // Ангилал нэмэгдсэн/устсан байж болно
+  renderSummary();
+  renderList();
+  renderBudget();
+  renderSettings();
+}
+
+// ===== 8. Гүйлгээ нэмэх / засах / устгах цонх (F1, F2) =====
 const dialog = document.getElementById('tx-dialog');
 const form = document.getElementById('tx-form');
 let editingId = null;  // null = шинэ гүйлгээ, эс бөгөөс засаж буй гүйлгээний id
@@ -206,6 +330,5 @@ document.getElementById('tx-delete').addEventListener('click', () => {
   renderAll();
 });
 
-// ===== 7. Эхний зураг =====
-refreshFilterCategories();
+// ===== 9. Эхний зураг =====
 renderAll();

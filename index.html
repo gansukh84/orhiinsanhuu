@@ -46,6 +46,9 @@
         </div>
       </div>
 
+      <!-- Төсөв хэтэрсэн ангиллын анхааруулга (F5). Хэтрээгүй бол нуугдана. -->
+      <div id="budget-alerts" class="budget-alerts" role="status" hidden></div>
+
       <!-- Графикууд (F6) -->
       <h3>Зарлага ангиллаар</h3>
       <div id="chart-categories" class="chart"></div>
@@ -80,12 +83,45 @@
       <ul id="tx-list" class="tx-list"></ul>
     </section>
     <section class="panel" id="panel-budget" role="tabpanel" hidden>
-      <h2>Төсөв</h2>
-      <p class="placeholder">Удахгүй</p>
+      <div class="panel-head">
+        <h2>Төсөв</h2>
+        <button type="button" id="copy-budget" class="btn">Өмнөх сарын төсвийг хуулах</button>
+      </div>
+      <p class="muted hint">Ангилал бүрт сарын дээд хязгаараа бичээд Enter дарна. Талбарыг хоосон болговол төсөв арилна.</p>
+
+      <!-- Нийт төсөв ба зарцуулалт -->
+      <div id="budget-total" class="budget-total"></div>
+
+      <!-- Ангилал бүрийн төсөв, явцын зураас (F5) -->
+      <ul id="budget-list" class="budget-list"></ul>
     </section>
+
     <section class="panel" id="panel-settings" role="tabpanel" hidden>
       <h2>Тохиргоо</h2>
-      <p class="placeholder">Удахгүй</p>
+
+      <!-- Ангилал удирдах (F3) -->
+      <h3>Ангилал</h3>
+      <form id="category-form" class="category-form" novalidate>
+        <label class="field">Төрөл
+          <select name="type">
+            <option value="expense">Зарлага</option>
+            <option value="income">Орлого</option>
+          </select>
+        </label>
+        <label class="field category-name-field">Шинэ ангиллын нэр
+          <input name="name" maxlength="50" autocomplete="off" placeholder="Жишээ нь: Тэжээвэр амьтан">
+        </label>
+        <button type="submit" class="btn btn-primary">Нэмэх</button>
+      </form>
+      <div id="category-error" class="form-errors" role="alert" hidden></div>
+
+      <h4>Зарлагын ангилал</h4>
+      <ul id="category-list-expense" class="category-list"></ul>
+
+      <h4>Орлогын ангилал</h4>
+      <ul id="category-list-income" class="category-list"></ul>
+
+      <!-- JSON нөөц, бүх өгөгдөл устгах — 5-р алхамд нэмэгдэнэ -->
     </section>
   </main>
 

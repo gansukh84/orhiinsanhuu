@@ -16,6 +16,15 @@ import {
   monthTotals,
   expenseByCategory,
   monthlyTrend,
+  budgetStatus,
+  getBudgetLimit,
+  setBudget,
+  copyBudgets,
+  budgetRows,
+  validateCategoryName,
+  countCategoryTransactions,
+  pickCategoryColor,
+  CATEGORY_PALETTE,
 } from '../js/calc.js';
 import { DEFAULT_CATEGORIES } from '../js/storage.js';
 
@@ -203,4 +212,83 @@ test('monthlyTrend: сүүлийн 6 сар, хуучнаас шинэ рүү, �
   assert.deepEqual(trend.map((t) => t.month), ['2026-08', '2026-09', '2026-10', '2026-11', '2026-12', '2027-01']);
   assert.deepEqual(trend[3], { month: '2026-11', income: 2000000, expense: 1300000 });
   assert.deepEqual(trend[0], { month: '2026-08', income: 0, expense: 0 });
+});
+
+// ===== Төсөв (F5) =====
+test('budgetStatus: өнгөний хил 79% ногоон, 80% шар, 100% шар, 101% улаан', () => {
+  assert.deepEqual(budgetStatus(79, 100), { percent: 79, level: 'ok' });
+  assert.deepEqual(budgetStatus(80, 100), { percent: 80, level: 'warn' });
+  assert.deepEqual(budgetStatus(100, 100), { percent: 100, level: 'warn' });
+  assert.deepEqual(budgetStatus(101, 100), { percent: 101, level: 'over' });
+});
+
+test('budgetStatus: дугуйлалт хилийг эвдэхгүй (79.9% ногоон, 100.4% улаан)', () => {
+  assert.equal(budgetStatus(799, 1000).level, 'ok');
+  assert.equal(budgetStatus(1004, 1000).level, 'over');
+  assert.equal(budgetStatus(0, 500000).level, 'ok');
+});
+
+test('setBudget, getBudgetLimit: тавих, солих, арилгах', () => {
+  let budgets = [];
+  budgets = setBudget(budgets, 'exp-food', '2026-11', 500000);
+  assert.equal(getBudgetLimit(budgets, 'exp-food', '2026-11'), 500000);
+  assert.equal(getBudgetLimit(budgets, 'exp-food', '2026-10'), null);  // өөр сар
+  budgets = setBudget(budgets, 'exp-food', '2026-11', 600000);
+  assert.equal(budgets.length, 1);
+  assert.equal(getBudgetLimit(budgets, 'exp-food', '2026-11'), 600000);
+  budgets = setBudget(budgets, 'exp-food', '2026-11', null);
+  assert.deepEqual(budgets, []);
+});
+
+test('copyBudgets: өмнөх сарын төсвийг хуулж, ижил ангиллыг дарж бичнэ', () => {
+  const budgets = [
+    { categoryId: 'exp-food', month: '2026-10', limit: 500000 },
+    { categoryId: 'exp-fun', month: '2026-10', limit: 100000 },
+    { categoryId: 'exp-food', month: '2026-11', limit: 1 },
+    { categoryId: 'exp-loan', month: '2026-11', limit: 300000 },
+  ];
+  const { budgets: result, copied } = copyBudgets(budgets, '2026-10', '2026-11');
+  assert.equal(copied, 2);
+  assert.equal(getBudgetLimit(result, 'exp-food', '2026-11'), 500000);
+  assert.equal(getBudgetLimit(result, 'exp-fun', '2026-11'), 100000);
+  assert.equal(getBudgetLimit(result, 'exp-loan', '2026-11'), 300000);  // хөндөгдөхгүй
+  assert.equal(getBudgetLimit(result, 'exp-food', '2026-10'), 500000);  // эх сар хэвээр
+  assert.equal(budgets.length, 4);  // анхны массив өөрчлөгдөөгүй
+});
+
+test('budgetRows: зарлагын ангилал бүрт зарцуулсан, хязгаар, төлөв', () => {
+  const budgets = [{ categoryId: 'exp-food', month: '2026-11', limit: 400000 }];
+  const rows = budgetRows(monthSample, DEFAULT_CATEGORIES, budgets, '2026-11');
+  assert.equal(rows.length, 10);  // зөвхөн зарлагын ангиллууд
+  const food = rows.find((r) => r.category.id === 'exp-food');
+  assert.equal(food.spent, 500000);
+  assert.deepEqual(food.status, { percent: 125, level: 'over' });
+  const housing = rows.find((r) => r.category.id === 'exp-housing');
+  assert.equal(housing.spent, 800000);
+  assert.equal(housing.limit, null);
+  assert.equal(housing.status, null);
+});
+
+// ===== Ангилал (F3) =====
+test('validateCategoryName: хоосон, урт, давхардсан нэрийг татгалзана', () => {
+  assert.ok(validateCategoryName('   ', 'expense', DEFAULT_CATEGORIES));
+  assert.ok(validateCategoryName('а'.repeat(51), 'expense', DEFAULT_CATEGORIES));
+  assert.ok(validateCategoryName('хоол ХҮНС', 'expense', DEFAULT_CATEGORIES));
+  assert.equal(validateCategoryName('Тэжээвэр амьтан', 'expense', DEFAULT_CATEGORIES), null);
+  // Өөр төрөлд ижил нэр байж болно («Бусад» хоёуланд нь байдаг шиг)
+  assert.equal(validateCategoryName('Хоол хүнс', 'income', DEFAULT_CATEGORIES), null);
+  // Нэр солихдоо өөрийнхөө нэрийг үлдээж болно
+  assert.equal(validateCategoryName('Хоол хүнс', 'expense', DEFAULT_CATEGORIES, 'exp-food'), null);
+});
+
+test('countCategoryTransactions: ангиллын гүйлгээг тоолно', () => {
+  assert.equal(countCategoryTransactions(monthSample, 'exp-food'), 3);
+  assert.equal(countCategoryTransactions(monthSample, 'exp-fun'), 0);
+});
+
+test('pickCategoryColor: хэрэглэгдээгүй өнгө сонгоно', () => {
+  const used = [{ color: CATEGORY_PALETTE[0] }, { color: CATEGORY_PALETTE[1].toUpperCase() }];
+  assert.equal(pickCategoryColor(used), CATEGORY_PALETTE[2]);
+  const all = CATEGORY_PALETTE.map((color) => ({ color }));
+  assert.ok(CATEGORY_PALETTE.includes(pickCategoryColor(all)));
 });

@@ -7,7 +7,13 @@ const moneyFormatter = new Intl.NumberFormat('mn-MN');
 // Дүнг мянгатын таслалтай, ₮ тэмдэгтэй текст болгоно.
 // Жишээ: formatMoney(1250000) → "1,250,000₮"
 export function formatMoney(amount) {
-  return `${moneyFormatter.format(amount)}₮`;
+  return `${formatNumber(amount)}₮`;
+}
+
+// Зөвхөн мянгатын таслалтай тоо (₮-гүй) — оруулах талбарт харуулахад.
+// Жишээ: formatNumber(500000) → "500,000"
+export function formatNumber(amount) {
+  return moneyFormatter.format(amount);
 }
 
 // Хэрэглэгчийн оруулсан дүнг бүхэл тоо болгоно.
@@ -185,4 +191,92 @@ export function monthlyTrend(transactions, endMonth, count = 6) {
     result.push({ month, income, expense });
   }
   return result;
+}
+
+// ===== Төсөв (F5) =====
+
+// Зарцуулалтын хувь ба өнгөний түвшин.
+//   80%-иас бага → 'ok' (ногоон), 80–100% → 'warn' (шар), 100%-иас их → 'over' (улаан)
+// Хилийг бутархайтай харьцаагаар шалгана — дугуйлалтаас болж 79.6% нь шар болохгүй.
+export function budgetStatus(spent, limit) {
+  const ratio = spent / limit;
+  let level = 'ok';
+  if (ratio > 1) level = 'over';
+  else if (ratio >= 0.8) level = 'warn';
+  return { percent: Math.round(ratio * 100), level };
+}
+
+// Тухайн сарын төсвийн хязгаар (байхгүй бол null)
+export function getBudgetLimit(budgets, categoryId, month) {
+  const budget = budgets.find((b) => b.categoryId === categoryId && b.month === month);
+  return budget ? budget.limit : null;
+}
+
+// Төсөв тавих/солих/арилгах. limit = null бол тухайн сарын төсвийг арилгана.
+// Анхны массивыг өөрчлөхгүй, ШИНЭ массив буцаана.
+export function setBudget(budgets, categoryId, month, limit) {
+  const rest = budgets.filter((b) => !(b.categoryId === categoryId && b.month === month));
+  return limit === null ? rest : [...rest, { categoryId, month, limit }];
+}
+
+// fromMonth-ийн төсвүүдийг toMonth руу хуулна (toMonth-д ижил ангилал байвал дарж бичнэ).
+// Буцаах: { budgets: шинэ массив, copied: хуулсан тоо }
+export function copyBudgets(budgets, fromMonth, toMonth) {
+  const source = budgets.filter((b) => b.month === fromMonth);
+  let result = budgets;
+  for (const b of source) {
+    result = setBudget(result, b.categoryId, toMonth, b.limit);
+  }
+  return { budgets: result, copied: source.length };
+}
+
+// Зарлагын ангилал бүрийн төсвийн мөр: зарцуулсан, хязгаар, төлөв.
+// Буцаах: [{ category, spent, limit, status }] — status нь төсөвгүй бол null
+export function budgetRows(transactions, categories, budgets, month) {
+  const spentById = new Map(
+    expenseByCategory(transactions, month, categories).map((e) => [e.categoryId, e.amount])
+  );
+  return categories
+    .filter((c) => c.type === 'expense')
+    .map((category) => {
+      const spent = spentById.get(category.id) || 0;
+      const limit = getBudgetLimit(budgets, category.id, month);
+      return { category, spent, limit, status: limit ? budgetStatus(spent, limit) : null };
+    });
+}
+
+// ===== Ангилал (F3) =====
+
+// Ангиллын нэрийг шалгана. Алдаа байвал мессеж, зөв бол null буцаана.
+// excludeId — нэр сольж буй ангилал өөрөө «давхардсан» гэж тооцогдохгүйн тулд.
+export function validateCategoryName(name, type, categories, excludeId = null) {
+  const clean = (name || '').trim();
+  if (!clean) return 'Ангиллын нэр хоосон байж болохгүй.';
+  if (clean.length > 50) return 'Ангиллын нэр 50 тэмдэгтээс урт байж болохгүй.';
+  const lower = clean.toLocaleLowerCase('mn');
+  const duplicate = categories.some(
+    (c) => c.id !== excludeId && c.type === type && c.name.toLocaleLowerCase('mn') === lower
+  );
+  if (duplicate) return 'Ийм нэртэй ангилал аль хэдийн байна.';
+  return null;
+}
+
+// Ангилалд хэдэн гүйлгээ байгааг тоолно (0 бол устгаж болно)
+export function countCategoryTransactions(transactions, categoryId) {
+  return transactions.filter((t) => t.categoryId === categoryId).length;
+}
+
+// Шинэ ангиллын өнгөний сонголтууд
+export const CATEGORY_PALETTE = [
+  '#e76f51', '#2a9d8f', '#457b9d', '#6a4c93', '#f4a261', '#e63946',
+  '#264653', '#ff70a6', '#8d6e63', '#43aa8b', '#577590', '#f9844a',
+];
+
+// Шинэ ангилалд өнгө сонгоно: хэрэглэгдээгүй өнгө эхэнд, бүгд хэрэглэгдсэн бол дахин эхэлнэ
+export function pickCategoryColor(categories) {
+  const used = new Set(categories.map((c) => c.color.toLowerCase()));
+  return (
+    CATEGORY_PALETTE.find((color) => !used.has(color)) ||
+    CATEGORY_PALETTE[categories.length % CATEGORY_PALETTE.length]
+  );
 }

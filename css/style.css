@@ -187,6 +187,157 @@ body {
   gap: 6px;
 }
 
+/* ===== Төсөв (F5) ===== */
+:root {
+  --ok: #16a34a;     /* 80% хүртэл — ногоон */
+  --warn: #eab308;   /* 80–100% — шар */
+  --over: #dc2626;   /* 100%-иас дээш — улаан */
+}
+
+.panel-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.panel-head h2 {
+  margin: 0;
+}
+
+.hint {
+  margin: 4px 0 12px;
+  font-size: 0.85rem;
+}
+
+.budget-total {
+  padding: 10px 12px;
+  margin-bottom: 12px;
+  border-radius: 8px;
+  background: #f3f4f6;
+  font-size: 0.9rem;
+}
+
+.budget-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.budget-row {
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.budget-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.budget-input {
+  width: 130px;
+  flex-shrink: 0;
+  min-height: 44px;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font: inherit;
+  text-align: right;
+}
+
+.budget-info {
+  margin: 4px 0 6px;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.budget-info.level-warn { color: #a16207; }
+.budget-info.level-over { color: var(--over); font-weight: 600; }
+
+.progress {
+  height: 8px;
+  border-radius: 4px;
+  background: #f3f4f6;
+  overflow: hidden;
+}
+
+.progress-bar {
+  height: 100%;
+  border-radius: 4px;
+}
+
+.progress-bar.level-ok { background: var(--ok); }
+.progress-bar.level-warn { background: var(--warn); }
+.progress-bar.level-over { background: var(--over); }
+
+/* Хураангуй дээрх анхааруулга */
+.budget-alerts {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px;
+  margin-bottom: 8px;
+  border-radius: 8px;
+  background: #fef2f2;
+  color: var(--over);
+  font-size: 0.9rem;
+}
+
+.budget-alerts[hidden] {
+  display: none;
+}
+
+/* ===== Ангилал удирдах (F3) ===== */
+.panel h4 {
+  margin: 16px 0 4px;
+  font-size: 0.9rem;
+  color: var(--muted);
+}
+
+.category-form {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+  align-items: end;
+  margin-bottom: 8px;
+}
+
+.category-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.category-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.category-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.category-count {
+  font-size: 0.8rem;
+}
+
+.btn-small {
+  padding: 0 10px;
+  font-size: 0.85rem;
+  flex-shrink: 0;
+}
+
 /* ===== Табууд: утсан дээр дэлгэцийн доод талд тогтмол ===== */
 .tabs {
   position: fixed;
@@ -509,6 +660,11 @@ body {
 
   .card-wide {
     grid-column: auto;
+  }
+
+  /* Ангилал нэмэх форм нэг мөрөнд */
+  .category-form {
+    grid-template-columns: 140px 1fr auto;
   }
 
   .filter-search {

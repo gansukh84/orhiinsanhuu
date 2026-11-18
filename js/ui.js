@@ -2,7 +2,18 @@
 // Хэрэглэгчийн бичсэн текстийг (тайлбар г.м.) үргэлж textContent-ээр оруулна.
 // innerHTML ашиглавал хортой код ажиллах эрсдэлтэй.
 
-import { formatMoney } from './calc.js';
+import { formatMoney, formatNumber } from './calc.js';
+
+// Өнгөт цэг + ангиллын нэр (жагсаалт, төсөв, тохиргоонд дахин ашиглана)
+function categoryBadge(category) {
+  const wrap = document.createElement('span');
+  wrap.className = 'tx-cat';
+  const dot = document.createElement('span');
+  dot.className = 'dot';
+  dot.style.background = category?.color || '#9e9e9e';
+  wrap.append(dot, category?.name || 'Тодорхойгүй ангилал');
+  return wrap;
+}
 
 // Ангиллын нэр: ижил нэртэй (жишээ нь «Бусад») ангиллыг ялгахын тулд
 // хэрэгтэй үед төрлийг хаалтанд нэмнэ.
@@ -69,12 +80,7 @@ export function renderTransactionList(listEl, countEl, transactions, categories,
     const main = document.createElement('span');
     main.className = 'tx-main';
 
-    const cat = document.createElement('span');
-    cat.className = 'tx-cat';
-    const dot = document.createElement('span');
-    dot.className = 'dot';
-    dot.style.background = category?.color || '#9e9e9e';
-    cat.append(dot, category?.name || 'Тодорхойгүй ангилал');
+    const cat = categoryBadge(category);
 
     const note = document.createElement('span');
     note.className = 'tx-note';
@@ -136,4 +142,129 @@ export function showFormErrors(form, errors) {
     box.append(line);
   }
   box.hidden = errors.length === 0;
+}
+
+// ===== Төсөв (F5) =====
+
+// Төсвийн жагсаалтыг зурна.
+// rows: calc.js-ийн budgetRows()-ийн үр дүн
+// onLimitChange(categoryId, текст) — хэрэглэгч хязгаар өөрчлөхөд дуудагдана
+export function renderBudgetList(listEl, totalEl, rows, onLimitChange) {
+  listEl.replaceChildren();
+
+  for (const row of rows) {
+    const li = document.createElement('li');
+    li.className = 'budget-row';
+
+    // Дээд мөр: ангилал | хязгаар оруулах талбар
+    const head = document.createElement('div');
+    head.className = 'budget-head';
+
+    const input = document.createElement('input');
+    input.className = 'budget-input';
+    input.inputMode = 'numeric';
+    input.autocomplete = 'off';
+    input.placeholder = 'Төсөв тавих';
+    input.value = row.limit ? formatNumber(row.limit) : '';
+    input.setAttribute('aria-label', `${row.category.name} — сарын төсөв`);
+    // change: Enter дарах эсвэл талбараас гарахад нэг удаа ажиллана
+    input.addEventListener('change', () => onLimitChange(row.category.id, input.value));
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') input.blur();
+    });
+
+    head.append(categoryBadge(row.category), input);
+
+    // Доод мөр: зарцуулсан / хязгаар · хувь
+    const info = document.createElement('div');
+    info.className = 'budget-info';
+    li.append(head, info);
+
+    if (row.status) {
+      info.textContent = `${formatMoney(row.spent)} / ${formatMoney(row.limit)} · ${row.status.percent}%`;
+      info.classList.add(`level-${row.status.level}`);
+
+      // Явцын зураас: 100%-иас хэтэрсэн ч зураас дүүрэн хэвээр (улаан)
+      const track = document.createElement('div');
+      track.className = 'progress';
+      const bar = document.createElement('div');
+      bar.className = `progress-bar level-${row.status.level}`;
+      bar.style.width = `${Math.min(row.status.percent, 100)}%`;
+      track.append(bar);
+      li.append(track);
+    } else {
+      info.textContent = `Зарцуулсан ${formatMoney(row.spent)} · төсөв тавиагүй`;
+    }
+
+    listEl.append(li);
+  }
+
+  // Нийт: зөвхөн төсөв тавьсан ангиллуудаар
+  const withBudget = rows.filter((r) => r.limit);
+  if (withBudget.length === 0) {
+    totalEl.textContent = 'Энэ сард төсөв тавиагүй байна.';
+    return;
+  }
+  const limitSum = withBudget.reduce((sum, r) => sum + r.limit, 0);
+  const spentSum = withBudget.reduce((sum, r) => sum + r.spent, 0);
+  totalEl.textContent = `Нийт төсөв ${formatMoney(limitSum)} · Зарцуулсан ${formatMoney(spentSum)} · Үлдсэн ${formatMoney(limitSum - spentSum)}`;
+}
+
+// Хураангуй дээрх анхааруулга: төсөв хэтэрсэн (100%-иас их) ангиллууд
+export function renderBudgetAlerts(container, rows) {
+  const over = rows.filter((r) => r.status?.level === 'over');
+  container.replaceChildren();
+  container.hidden = over.length === 0;
+
+  for (const row of over) {
+    const line = document.createElement('div');
+    line.textContent =
+      `⚠ ${row.category.name}: төсвөөс ${formatMoney(row.spent - row.limit)} хэтэрсэн (${row.status.percent}%)`;
+    container.append(line);
+  }
+}
+
+// ===== Ангилал удирдах (F3) =====
+
+// Орлого, зарлагын ангиллын жагсаалтыг зурна.
+// counts: Map(categoryId → гүйлгээний тоо)
+// handlers: { onRename(category), onDelete(category) }
+export function renderCategoryManager(lists, categories, counts, handlers) {
+  for (const type of ['expense', 'income']) {
+    const listEl = lists[type];
+    listEl.replaceChildren();
+
+    for (const category of categories.filter((c) => c.type === type)) {
+      const li = document.createElement('li');
+      li.className = 'category-row';
+
+      const info = document.createElement('span');
+      info.className = 'category-info';
+      const count = document.createElement('span');
+      count.className = 'muted category-count';
+      count.textContent = `${counts.get(category.id) || 0} гүйлгээ`;
+      info.append(categoryBadge(category), count);
+
+      const rename = document.createElement('button');
+      rename.type = 'button';
+      rename.className = 'btn btn-small';
+      rename.textContent = 'Нэр солих';
+      rename.addEventListener('click', () => handlers.onRename(category));
+
+      const remove = document.createElement('button');
+      remove.type = 'button';
+      remove.className = 'btn btn-small btn-danger';
+      remove.textContent = 'Устгах';
+      remove.addEventListener('click', () => handlers.onDelete(category));
+
+      li.append(info, rename, remove);
+      listEl.append(li);
+    }
+  }
+}
+
+// Ангиллын формын алдааг харуулна (хоосон текст бол нууна)
+export function showCategoryError(box, message) {
+  box.textContent = message || '';
+  box.hidden = !message;
 }
