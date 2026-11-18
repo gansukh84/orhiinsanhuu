@@ -7,10 +7,36 @@
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
-  <!-- Одоогоор зөвхөн гарчиг. Табууд 1-р алхамд нэмэгдэнэ. -->
-  <main class="hello">
+  <header class="app-header">
     <h1>Манай төсөв</h1>
-    <p>Удахгүй</p>
+  </header>
+
+  <!-- Таб товчнууд: утсан дээр доод талд, компьютер дээр дээд талд -->
+  <nav class="tabs" role="tablist" aria-label="Үндсэн цэс">
+    <button class="tab" role="tab" data-tab="summary" aria-selected="true">Хураангуй</button>
+    <button class="tab" role="tab" data-tab="transactions" aria-selected="false">Гүйлгээ</button>
+    <button class="tab" role="tab" data-tab="budget" aria-selected="false">Төсөв</button>
+    <button class="tab" role="tab" data-tab="settings" aria-selected="false">Тохиргоо</button>
+  </nav>
+
+  <!-- Таб бүрийн агуулга. Одоогоор зөвхөн «Удахгүй» гэсэн бичигтэй. -->
+  <main class="content">
+    <section class="panel" id="panel-summary" role="tabpanel">
+      <h2>Хураангуй</h2>
+      <p class="placeholder">Удахгүй</p>
+    </section>
+    <section class="panel" id="panel-transactions" role="tabpanel" hidden>
+      <h2>Гүйлгээ</h2>
+      <p class="placeholder">Удахгүй</p>
+    </section>
+    <section class="panel" id="panel-budget" role="tabpanel" hidden>
+      <h2>Төсөв</h2>
+      <p class="placeholder">Удахгүй</p>
+    </section>
+    <section class="panel" id="panel-settings" role="tabpanel" hidden>
+      <h2>Тохиргоо</h2>
+      <p class="placeholder">Удахгүй</p>
+    </section>
   </main>
 
   <script type="module" src="js/app.js"></script>
