@@ -10,9 +10,10 @@ set search_path = public, extensions;
 select plan(25);
 
 -- ===== Бэлтгэл: хоёр туршилтын хэрэглэгч (А ба Б) =====
+-- Имэйл нь апп-аар туршсан хэрэглэгчидтэй (a@test.mn г.м.) давхцахгүй байх ёстой
 insert into auth.users (id, email, aud, role) values
-  ('00000000-0000-0000-0000-00000000000a', 'a@test.mn', 'authenticated', 'authenticated'),
-  ('00000000-0000-0000-0000-00000000000b', 'b@test.mn', 'authenticated', 'authenticated');
+  ('00000000-0000-0000-0000-00000000000a', 'rls-test-a@example.invalid', 'authenticated', 'authenticated'),
+  ('00000000-0000-0000-0000-00000000000b', 'rls-test-b@example.invalid', 'authenticated', 'authenticated');
 
 -- Тухайн хэрэглэгчээр «нэвтэрсэн» мэт болгох туслах функц
 create function pg_temp.login(uid uuid) returns void language sql as $$
