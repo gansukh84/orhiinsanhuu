@@ -1,0 +1,15 @@
+# GitHub руу оруулахгүй файлууд
+
+# npm-ээр суулгасан сангууд (npm install хийхэд дахин үүснэ)
+node_modules/
+
+# Нууц утга хадгалах файлууд — хэзээ ч GitHub руу бүү оруул
+.env
+.env.*
+
+# Supabase CLI-ийн түр файлууд (таны компьютерт л хамаатай)
+supabase/.temp/
+supabase/.branches/
+
+# Claude Code-ийн хувийн тохиргоо
+.claude/settings.local.json
