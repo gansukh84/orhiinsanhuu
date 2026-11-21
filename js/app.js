@@ -1,5 +1,13 @@
 // Аппын эхлэх цэг: өгөгдөл ачаалах, таб солих, гүйлгээ нэмэх/засах/устгах.
-import { loadData, saveData, hasStoredData } from './storage.js';
+import {
+  loadData,
+  saveData,
+  hasStoredData,
+  createDefaultData,
+  exportData,
+  parseBackup,
+  backupFileName,
+} from './storage.js';
 import {
   parseAmount,
   validateTransaction,
@@ -36,7 +44,7 @@ import { renderCategoryChart, renderTrendChart } from './charts.js';
 // Анх удаа нээж байвал анхны ангиллуудтай өгөгдлийг шууд хадгална.
 // Дараагийн удаа хадгалсан өгөгдөл localStorage-аас уншигдана.
 const firstRun = !hasStoredData();
-const data = loadData();
+let data = loadData();  // let: нөөц оруулах, бүгдийг устгахад бүтнээр нь солигдоно
 if (firstRun) {
   saveData(data);
 }
@@ -250,6 +258,66 @@ function deleteCategory(category) {
   renderAll();
 }
 
+// ===== 8. Нөөц: JSON татах, оруулах (F8) =====
+
+// Бүх өгөгдлийг .json файл болгон татна
+document.getElementById('export-btn').addEventListener('click', () => {
+  const blob = new Blob([exportData(data)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  // Түр холбоос үүсгээд дарснаар браузер файлыг татна
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = backupFileName();
+  link.click();
+  URL.revokeObjectURL(url);
+});
+
+const importFile = document.getElementById('import-file');
+document.getElementById('import-btn').addEventListener('click', () => importFile.click());
+
+// Файл сонгогдсоны дараа: шалгах → баталгаажуулах → солих
+importFile.addEventListener('change', async () => {
+  const file = importFile.files[0];
+  importFile.value = '';  // Ижил файлыг дахин сонгоход ч ажиллахын тулд
+  if (!file) return;
+
+  const result = parseBackup(await file.text());
+  if (!result.ok) {
+    // Алдаатай бол одоогийн өгөгдөлд огт хүрэхгүй
+    alert(`Файлыг оруулж чадсангүй: ${result.error}\nОдоогийн өгөгдөл өөрчлөгдөөгүй.`);
+    return;
+  }
+
+  const incoming = result.data;
+  const ok = confirm(
+    `Файлд ${incoming.transactions.length} гүйлгээ, ${incoming.categories.length} ангилал, ` +
+    `${incoming.budgets.length} төсөв байна.\n\n` +
+    `Одоогийн өгөгдөл (${data.transactions.length} гүйлгээ) бүхэлдээ солигдоно. Үргэлжлүүлэх үү?`
+  );
+  if (!ok) return;
+
+  data = incoming;
+  persist();
+  renderAll();
+  alert('Нөөцийг амжилттай орууллаа.');
+});
+
+// ===== 9. Бүх өгөгдлийг устгах (давхар баталгаажуулалт) =====
+document.getElementById('reset-btn').addEventListener('click', () => {
+  if (!confirm('Бүх гүйлгээ, төсөв, өөрийн нэмсэн ангилал устана. Үргэлжлүүлэх үү?')) return;
+  // Хоёр дахь баталгаа: санамсаргүй дарахаас хамгаална
+  const answer = prompt('Итгэлтэй байвал «УСТГАХ» гэж бичнэ үү. Өмнө нь нөөцөө татсан эсэхээ шалгаарай.');
+  if (answer === null) return;
+  if (answer.trim().toUpperCase() !== 'УСТГАХ') {
+    alert('Бичсэн үг таарсангүй. Юу ч устгаагүй.');
+    return;
+  }
+  data = createDefaultData();
+  persist();
+  renderAll();
+  alert('Бүх өгөгдлийг устгалаа.');
+});
+
 // Сар, хураангуй, жагсаалт, төсөв, тохиргоо — бүгдийг дахин зурна
 function renderAll() {
   document.getElementById('month-label').textContent = formatMonthLabel(selectedMonth);
@@ -260,7 +328,7 @@ function renderAll() {
   renderSettings();
 }
 
-// ===== 8. Гүйлгээ нэмэх / засах / устгах цонх (F1, F2) =====
+// ===== 10. Гүйлгээ нэмэх / засах / устгах цонх (F1, F2) =====
 const dialog = document.getElementById('tx-dialog');
 const form = document.getElementById('tx-form');
 let editingId = null;  // null = шинэ гүйлгээ, эс бөгөөс засаж буй гүйлгээний id
@@ -330,5 +398,5 @@ document.getElementById('tx-delete').addEventListener('click', () => {
   renderAll();
 });
 
-// ===== 9. Эхний зураг =====
+// ===== 11. Эхний зураг =====
 renderAll();

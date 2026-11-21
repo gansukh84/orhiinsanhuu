@@ -95,3 +95,79 @@ export function saveData(data, storage = globalThis.localStorage) {
     return false;
   }
 }
+
+// ===== JSON нөөц: татах, оруулах (F8) =====
+
+// Татах файлын нэр. Жишээ: "manai-tusuv-2026-11-21.json"
+export function backupFileName(date = new Date()) {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `manai-tusuv-${y}-${m}-${d}.json`;
+}
+
+// Өгөгдлийг уншихад гоё, догол мөртэй JSON текст болгоно
+export function exportData(data) {
+  return JSON.stringify(data, null, 2);
+}
+
+// Туслах шалгалтууд (оруулж буй файлын мөр бүрийг шалгахад)
+const isText = (v) => typeof v === 'string' && v.trim() !== '';
+const isType = (v) => v === 'income' || v === 'expense';
+const isPositiveInt = (v) => Number.isSafeInteger(v) && v > 0;
+const isDay = (v) => typeof v === 'string' && /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/.test(v);
+const isMonth = (v) => typeof v === 'string' && /^\d{4}-(0[1-9]|1[0-2])$/.test(v);
+const isColor = (v) => typeof v === 'string' && /^#[0-9a-fA-F]{6}$/.test(v);
+
+// Оруулах гэж буй JSON текстийг бүрэн шалгана.
+// Амжилттай: { ok: true, data }   Алдаатай: { ok: false, error: 'монгол тайлбар' }
+// Энэ функц localStorage-д юу ч бичихгүй — тиймээс алдаатай файл одоогийн өгөгдлийг устгахгүй.
+export function parseBackup(text) {
+  let data;
+  try {
+    data = JSON.parse(text);
+  } catch {
+    return { ok: false, error: 'Файл JSON хэлбэртэй биш байна.' };
+  }
+  if (!isValidData(data)) {
+    return { ok: false, error: 'Энэ файл «Манай төсөв»-ийн нөөц биш байна (бүтэц эсвэл хувилбар таарахгүй).' };
+  }
+
+  // Ангиллууд
+  const categoryById = new Map();
+  for (const [i, c] of data.categories.entries()) {
+    if (!c || !isText(c.id) || !isText(c.name) || !isType(c.type) || !isColor(c.color)) {
+      return { ok: false, error: `${i + 1}-р ангилал буруу байна.` };
+    }
+    if (categoryById.has(c.id)) {
+      return { ok: false, error: `Ангиллын id давхардсан байна: ${c.id}` };
+    }
+    categoryById.set(c.id, c);
+  }
+
+  // Гүйлгээнүүд
+  const txIds = new Set();
+  for (const [i, t] of data.transactions.entries()) {
+    const category = t && categoryById.get(t.categoryId);
+    const ok =
+      t && isText(t.id) && !txIds.has(t.id) &&
+      isType(t.type) && isPositiveInt(t.amount) && isDay(t.date) &&
+      category && category.type === t.type &&
+      (t.note === undefined || typeof t.note === 'string') &&
+      (t.createdAt === undefined || typeof t.createdAt === 'string');
+    if (!ok) {
+      return { ok: false, error: `${i + 1}-р гүйлгээ буруу байна.` };
+    }
+    txIds.add(t.id);
+  }
+
+  // Төсвүүд — зөвхөн зарлагын ангилалд тавина
+  for (const [i, b] of data.budgets.entries()) {
+    const category = b && categoryById.get(b.categoryId);
+    if (!category || category.type !== 'expense' || !isMonth(b.month) || !isPositiveInt(b.limit)) {
+      return { ok: false, error: `${i + 1}-р төсөв буруу байна.` };
+    }
+  }
+
+  return { ok: true, data };
+}

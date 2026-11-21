@@ -2,7 +2,7 @@
 <html lang="mn">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Манай төсөв</title>
   <link rel="stylesheet" href="css/style.css">
 </head>
@@ -121,7 +121,19 @@
       <h4>Орлогын ангилал</h4>
       <ul id="category-list-income" class="category-list"></ul>
 
-      <!-- JSON нөөц, бүх өгөгдөл устгах — 5-р алхамд нэмэгдэнэ -->
+      <!-- JSON нөөц (F8) -->
+      <h3>Нөөц</h3>
+      <p class="muted hint">Бүх өгөгдлөө файл болгон хадгалж, өөр утас, компьютерт оруулж болно.</p>
+      <div class="backup-actions">
+        <button type="button" id="export-btn" class="btn">Татах (JSON)</button>
+        <!-- Файл сонгох талбарыг нууж, товчоор нээнэ -->
+        <button type="button" id="import-btn" class="btn">Оруулах</button>
+        <input type="file" id="import-file" accept=".json,application/json" hidden>
+      </div>
+
+      <!-- Бүх өгөгдлийг устгах (давхар баталгаажуулалттай) -->
+      <h3>Аюултай бүс</h3>
+      <button type="button" id="reset-btn" class="btn btn-danger">Бүх өгөгдлийг устгах</button>
     </section>
   </main>
 
