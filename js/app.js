@@ -179,7 +179,7 @@ loginForm.addEventListener('submit', async (event) => {
     const tooMany = error.status === 429 || /rate limit/i.test(error.message);
     showLoginMessage(
       tooMany
-        ? 'Хэт олон удаа хүслээ. Хэдэн минутын дараа дахин оролдоно уу.'
+        ? 'Имэйл илгээх хязгаарт хүрлээ. 1 цаг хүртэл хүлээгээд дахин оролдоно уу.'
         : friendlyError(error).replace('Хадгалж чадсангүй', 'Илгээж чадсангүй'),
       true
     );
