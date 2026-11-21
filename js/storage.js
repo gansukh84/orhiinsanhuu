@@ -171,3 +171,173 @@ export function parseBackup(text) {
 
   return { ok: true, data };
 }
+
+// ===== Үүлэн хадгалалт: Supabase (BAIRSHUULALT.md, 5-р алхам) =====
+//
+// Функц бүр Supabase client-ийг параметрээр авна (localStorage-ийн адил).
+// Ингэснээр тест дээр хуурамч client өгч шалгаж болно, энэ файл интернэтээс юу ч ачаалахгүй.
+// Алдаа гарвал монгол тайлбартай Error шиднэ (throw) — app.js түүнийг хэрэглэгчид харуулна.
+//
+// Сангийн талбарын нэр апп-аас арай өөр (snake_case):
+//   categoryId ↔ category_id,  createdAt ↔ created_at,  limit ↔ limit_amount
+
+// --- Сангийн мөр ↔ апп-ын объект хөрвүүлэх ---
+
+export function categoryFromRow(row) {
+  return { id: row.id, name: row.name, type: row.type, color: row.color };
+}
+
+export function transactionFromRow(row) {
+  return {
+    id: row.id,
+    type: row.type,
+    amount: Number(row.amount),
+    date: row.date,
+    categoryId: row.category_id,
+    note: row.note ?? '',
+    createdAt: row.created_at,
+  };
+}
+
+export function transactionToRow(tx) {
+  // user_id-г бичихгүй — сан өөрөө нэвтэрсэн хүний id-г тавина
+  return {
+    id: tx.id,
+    type: tx.type,
+    amount: tx.amount,
+    date: tx.date,
+    category_id: tx.categoryId,
+    note: tx.note ?? '',
+    ...(tx.createdAt ? { created_at: tx.createdAt } : {}),
+  };
+}
+
+export function budgetFromRow(row) {
+  return { categoryId: row.category_id, month: row.month, limit: Number(row.limit_amount) };
+}
+
+export function budgetToRow(budget) {
+  return { category_id: budget.categoryId, month: budget.month, limit_amount: budget.limit };
+}
+
+// --- Алдааг монгол мессеж болгох ---
+
+export const OFFLINE_MESSAGE = 'Интернэт холболт алга. Өөрчлөлт хадгалагдсангүй — холболтоо шалгаад дахин оролдоно уу.';
+
+export function friendlyError(error) {
+  const code = error?.code;
+  const text = String(error?.message ?? '');
+  if (globalThis.navigator?.onLine === false || /failed to fetch|networkerror|load failed/i.test(text)) {
+    return OFFLINE_MESSAGE;
+  }
+  if (code === '23505') return 'Ийм нэртэй ангилал аль хэдийн байна.';
+  if (code === '23503') return 'Ангилал таарахгүй байна, эсвэл энэ ангилалд гүйлгээ байгаа тул устгах боломжгүй.';
+  if (code === '23514') return 'Утга буруу байна (дүн 0-ээс их, тайлбар 200 тэмдэгтээс богино байх ёстой).';
+  if (code === '42501' || code === 'PGRST301' || /jwt/i.test(text)) {
+    return 'Нэвтрэх хугацаа дууссан байна. Хуудсыг дахин ачаалж, дахин нэвтэрнэ үү.';
+  }
+  return 'Хадгалж чадсангүй. Хэсэг хүлээгээд дахин оролдоно уу.';
+}
+
+// Supabase-ийн хариуг шалгана: алдаатай бол монгол мессежтэй Error шиднэ
+function check({ data, error }) {
+  if (error) {
+    const err = new Error(friendlyError(error));
+    err.cause = error;  // Жинхэнэ алдааг консолд харахад
+    throw err;
+  }
+  return data;
+}
+
+// --- Унших ---
+
+// Supabase нэг удаад 1000 хүртэл мөр буцаадаг тул хэсэг хэсгээр нь бүгдийг уншина
+export const PAGE_SIZE = 1000;
+
+async function fetchAllRows(client, table, orderBy) {
+  const rows = [];
+  for (let from = 0; ; from += PAGE_SIZE) {
+    const page = check(
+      await client.from(table).select('*').order(orderBy).range(from, from + PAGE_SIZE - 1)
+    );
+    rows.push(...page);
+    if (page.length < PAGE_SIZE) return rows;
+  }
+}
+
+// Нэвтэрсэн хэрэглэгчийн бүх өгөгдлийг уншина (RLS зөвхөн өөрийнхийг нь өгнө)
+export async function fetchAllData(client) {
+  const [categories, transactions, budgets] = await Promise.all([
+    fetchAllRows(client, 'categories', 'id'),
+    fetchAllRows(client, 'transactions', 'id'),
+    fetchAllRows(client, 'budgets', 'month'),
+  ]);
+  return {
+    version: DATA_VERSION,
+    categories: categories.map(categoryFromRow),
+    transactions: transactions.map(transactionFromRow),
+    budgets: budgets.map(budgetFromRow),
+  };
+}
+
+// --- Гүйлгээ ---
+
+export async function addTransaction(client, tx) {
+  check(await client.from('transactions').insert(transactionToRow(tx)));
+}
+
+export async function updateTransaction(client, tx) {
+  const { id, created_at, ...changes } = transactionToRow(tx);
+  const rows = check(await client.from('transactions').update(changes).eq('id', id).select('id'));
+  if (rows.length === 0) throw new Error('Гүйлгээ олдсонгүй. Хуудсыг дахин ачаална уу.');
+}
+
+export async function deleteTransaction(client, id) {
+  check(await client.from('transactions').delete().eq('id', id));
+}
+
+// --- Ангилал ---
+
+export async function addCategory(client, category) {
+  check(await client.from('categories').insert(categoryFromRow(category)));
+}
+
+export async function renameCategory(client, id, name) {
+  check(await client.from('categories').update({ name }).eq('id', id));
+}
+
+// Төсөв нь сан дээр хамт устана (on delete cascade)
+export async function deleteCategory(client, id) {
+  check(await client.from('categories').delete().eq('id', id));
+}
+
+// --- Төсөв ---
+
+// limit = null бол тухайн сарын төсвийг арилгана
+export async function saveBudget(client, categoryId, month, limit) {
+  if (limit === null) {
+    check(await client.from('budgets').delete().eq('category_id', categoryId).eq('month', month));
+  } else {
+    await saveBudgets(client, [{ categoryId, month, limit }]);
+  }
+}
+
+// Олон төсвийг нэг дор хадгална (байгаа бол шинэчилнэ)
+export async function saveBudgets(client, budgets) {
+  if (budgets.length === 0) return;
+  check(
+    await client
+      .from('budgets')
+      .upsert(budgets.map(budgetToRow), { onConflict: 'user_id,category_id,month' })
+  );
+}
+
+// --- Бүх өгөгдлийг солих (нөөц оруулах, бүгдийг устгах) ---
+// Сангийн нэг функц дотор хийгдэх тул дундаас тасарвал юу ч өөрчлөгдөхгүй.
+export async function replaceAllData(client, data) {
+  check(
+    await client.rpc('replace_all_data', {
+      payload: { categories: data.categories, transactions: data.transactions, budgets: data.budgets },
+    })
+  );
+}

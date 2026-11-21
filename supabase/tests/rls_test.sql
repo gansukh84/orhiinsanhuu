@@ -7,7 +7,7 @@ begin;
 create extension if not exists pgtap with schema extensions;
 set search_path = public, extensions;
 
-select plan(21);
+select plan(25);
 
 -- ===== Бэлтгэл: хоёр туршилтын хэрэглэгч (А ба Б) =====
 insert into auth.users (id, email, aud, role) values
@@ -83,7 +83,25 @@ delete from public.categories where id = 'exp-fun';
 select is((select count(*) from public.budgets where category_id = 'exp-fun'), 0::bigint,
   'Ангилал устахад төсөв нь хамт устана');
 
--- ===== 5. Нэвтрээгүй хүн (anon) =====
+-- ===== 5. Бүх өгөгдлийг солих (replace_all_data) =====
+select public.replace_all_data('{
+  "categories":   [{"id":"exp-food","name":"Хоол","type":"expense","color":"#e76f51"}],
+  "transactions": [{"id":"n1","type":"expense","amount":1000,"date":"2026-10-01","categoryId":"exp-food","note":"Сүү"}],
+  "budgets":      [{"categoryId":"exp-food","month":"2026-10","limit":5000}]
+}'::jsonb);
+select is((select count(*) from public.transactions), 1::bigint, 'Нөөц оруулахад хуучин гүйлгээ солигдоно');
+
+-- Алдаатай өгөгдөл (дүн 0) бол юу ч өөрчлөгдөхгүй — хуучин өгөгдөл хэвээр
+select throws_ok($$ select public.replace_all_data('{"categories":[],"transactions":[{"id":"z","type":"expense","amount":0,"date":"2026-10-01","categoryId":"exp-food"}],"budgets":[]}'::jsonb) $$,
+  null, null, 'Алдаатай нөөц татгалзагдана');
+select is((select note from public.transactions where id = 'n1'), 'Сүү',
+  'Алдаатай нөөцийн дараа өмнөх өгөгдөл хэвээр үлдсэн');
+
+-- Б-гийн өгөгдөлд хүрээгүй
+select pg_temp.login('00000000-0000-0000-0000-00000000000b');
+select is((select count(*) from public.categories), 14::bigint, 'А нөөц оруулахад Б-гийн ангиллууд хэвээр');
+
+-- ===== 6. Нэвтрээгүй хүн (anon) =====
 select set_config('request.jwt.claims', '{"role":"anon"}', true);
 select set_config('role', 'anon', true);
 

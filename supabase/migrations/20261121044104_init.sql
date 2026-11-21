@@ -127,3 +127,47 @@ revoke execute on function public.create_default_categories() from public, anon,
 create trigger on_auth_user_created
   after insert on auth.users
   for each row execute function public.create_default_categories();
+
+
+-- ===== 6. Бүх өгөгдлийг нэг дор солих (JSON нөөц оруулах, бүгдийг устгах) =====
+-- Нэг функц дотор хийгдэх тул «бүгд амжилттай, эсвэл юу ч өөрчлөгдөөгүй» байна:
+-- дундаас алдаа гарвал хуучин өгөгдөл хэвээр үлдэнэ (хагас устахгүй).
+-- security invoker — дуудсан хүний эрхээр ажиллана, тиймээс RLS хэвээр хамгаална.
+-- payload: { categories: [...], transactions: [...], budgets: [...] } — апп-ын JSON хэлбэр.
+create function public.replace_all_data(payload jsonb)
+returns void
+language plpgsql
+security invoker
+set search_path = ''
+as $$
+declare
+  uid uuid := auth.uid();
+begin
+  if uid is null then
+    raise exception 'Нэвтрээгүй байна' using errcode = '42501';
+  end if;
+
+  -- Хуучин өгөгдлийг устгана (төсөв → гүйлгээ → ангилал дарааллаар)
+  delete from public.budgets      where user_id = uid;
+  delete from public.transactions where user_id = uid;
+  delete from public.categories   where user_id = uid;
+
+  -- Шинэ өгөгдлийг оруулна. Шалгалтууд (дүн > 0 г.м.) хүснэгтийн дүрмээр хийгдэнэ.
+  insert into public.categories (user_id, id, name, type, color)
+  select uid, c.id, c.name, c.type, c.color
+  from jsonb_to_recordset(payload -> 'categories') as c (id text, name text, type text, color text);
+
+  insert into public.transactions (user_id, id, type, amount, date, category_id, note, created_at)
+  select uid, t.id, t.type, t.amount, t.date, t."categoryId", coalesce(t.note, ''), coalesce(t."createdAt", now())
+  from jsonb_to_recordset(payload -> 'transactions')
+    as t (id text, type text, amount bigint, date date, "categoryId" text, note text, "createdAt" timestamptz);
+
+  insert into public.budgets (user_id, category_id, month, limit_amount)
+  select uid, b."categoryId", b.month, b."limit"
+  from jsonb_to_recordset(payload -> 'budgets') as b ("categoryId" text, month text, "limit" bigint);
+end;
+$$;
+
+-- Зөвхөн нэвтэрсэн хүн дуудна
+revoke execute on function public.replace_all_data(jsonb) from public, anon;
+grant execute on function public.replace_all_data(jsonb) to authenticated;
