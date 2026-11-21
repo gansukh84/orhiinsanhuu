@@ -6,7 +6,8 @@
   <title>Манай төсөв</title>
   <link rel="stylesheet" href="css/style.css">
 </head>
-<body>
+<!-- data-auth: loading (шалгаж байна) | out (нэвтрээгүй) | in (нэвтэрсэн). CSS үүгээр дэлгэц солино. -->
+<body data-auth="loading">
   <header class="app-header">
     <h1>Манай төсөв</h1>
     <!-- Сар сонгогч: бүх таб энэ сарын өгөгдлийг харуулна -->
@@ -17,6 +18,26 @@
     </div>
   </header>
 
+  <!-- Төлвийн мөр: интернэт алга, ачаалж байна, алдаа (хэрэгтэй үед л харагдана) -->
+  <div id="status-banner" class="status-banner" role="status" hidden>
+    <span id="status-text"></span>
+    <button type="button" id="status-retry" class="btn btn-small" hidden>Дахин оролдох</button>
+  </div>
+
+  <!-- Нэвтрэх дэлгэц: имэйл хаяг → нэвтрэх холбоос (magic link) -->
+  <section id="login-screen" class="login-screen">
+    <p id="login-loading" class="muted">Ачаалж байна…</p>
+    <form id="login-form" class="login-form" novalidate hidden>
+      <h2>Нэвтрэх</h2>
+      <p class="muted">Имэйл хаягаа бичнэ үү. Нууц үг хэрэггүй — имэйлд тань нэвтрэх холбоос очно.</p>
+      <label class="field">Имэйл
+        <input type="email" name="email" autocomplete="email" inputmode="email" required placeholder="name@example.com">
+      </label>
+      <button type="submit" class="btn btn-primary">Нэвтрэх холбоос илгээх</button>
+      <div id="login-message" class="login-message" role="alert" hidden></div>
+    </form>
+  </section>
+
   <!-- Таб товчнууд: утсан дээр доод талд, компьютер дээр дээд талд -->
   <nav class="tabs" role="tablist" aria-label="Үндсэн цэс">
     <button class="tab" role="tab" data-tab="summary" aria-selected="true">Хураангуй</button>
@@ -25,7 +46,7 @@
     <button class="tab" role="tab" data-tab="settings" aria-selected="false">Тохиргоо</button>
   </nav>
 
-  <!-- Таб бүрийн агуулга. Одоогоор зөвхөн «Удахгүй» гэсэн бичигтэй. -->
+  <!-- Таб бүрийн агуулга -->
   <main class="content">
     <section class="panel" id="panel-summary" role="tabpanel">
       <h2>Хураангуй</h2>
@@ -130,6 +151,17 @@
         <button type="button" id="import-btn" class="btn">Оруулах</button>
         <input type="file" id="import-file" accept=".json,application/json" hidden>
       </div>
+
+      <!-- Өмнөх хувилбарт энэ төхөөрөмж (localStorage) дээр хадгалсан өгөгдөл байвал л харагдана -->
+      <div id="legacy-backup" class="legacy-backup" hidden>
+        <p class="muted hint">Энэ төхөөрөмж дээр өмнөх хувилбарын өгөгдөл байна. Татаж аваад «Оруулах»-аар үүл рүү шилжүүлж болно.</p>
+        <button type="button" id="legacy-export-btn" class="btn">Хуучин өгөгдлийг татах (JSON)</button>
+      </div>
+
+      <!-- Бүртгэл -->
+      <h3>Бүртгэл</h3>
+      <p class="muted">Нэвтэрсэн: <span id="account-email"></span></p>
+      <button type="button" id="logout-btn" class="btn">Гарах</button>
 
       <!-- Бүх өгөгдлийг устгах (давхар баталгаажуулалттай) -->
       <h3>Аюултай бүс</h3>

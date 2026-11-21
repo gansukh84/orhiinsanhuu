@@ -1,12 +1,29 @@
-// Аппын эхлэх цэг: өгөгдөл ачаалах, таб солих, гүйлгээ нэмэх/засах/устгах.
+// Аппын эхлэх цэг: нэвтрэлт, өгөгдөл ачаалах, таб солих, гүйлгээ нэмэх/засах/устгах.
+// Өгөгдөл Supabase-д хадгалагдана (js/config.js аль Supabase руу холбогдохыг шийднэ).
+//
+// Өөрчлөлт бүрийн дараалал:
+//   1) шинэ утгыг бэлдэнэ  2) Supabase-д хадгална (await)  3) амжилттай бол л дэлгэцийн өгөгдлийг шинэчилнэ.
+// Ингэснээр хадгалж чадаагүй өөрчлөлт дэлгэц дээр «хадгалагдсан» мэт харагдахгүй.
+import { supabase, isConfigured } from './config.js';
 import {
   loadData,
-  saveData,
   hasStoredData,
   createDefaultData,
   exportData,
   parseBackup,
   backupFileName,
+  fetchAllData,
+  addTransaction,
+  updateTransaction,
+  deleteTransaction,
+  addCategory,
+  renameCategory as renameCategoryInCloud,
+  deleteCategory as deleteCategoryInCloud,
+  saveBudget,
+  saveBudgets,
+  replaceAllData,
+  friendlyError,
+  OFFLINE_MESSAGE,
 } from './storage.js';
 import {
   parseAmount,
@@ -40,22 +57,25 @@ import {
 } from './ui.js';
 import { renderCategoryChart, renderTrendChart } from './charts.js';
 
-// ===== 1. Өгөгдөл ачаалах (F9) =====
-// Анх удаа нээж байвал анхны ангиллуудтай өгөгдлийг шууд хадгална.
-// Дараагийн удаа хадгалсан өгөгдөл localStorage-аас уншигдана.
-const firstRun = !hasStoredData();
-let data = loadData();  // let: нөөц оруулах, бүгдийг устгахад бүтнээр нь солигдоно
-if (firstRun) {
-  saveData(data);
-}
-console.log(
-  `Манай төсөв ачааллаа: ${data.categories.length} ангилал, ${data.transactions.length} гүйлгээ`
-);
+// ===== 1. Өгөгдөл ба хадгалалт =====
+// Нэвтэрсэн хэрэглэгчийн өгөгдөл (Supabase-аас ачаалсны дараа дүүрнэ)
+let data = { version: 1, transactions: [], categories: [], budgets: [] };
+let currentUserId = null;
 
-// Өгөгдлийг хадгалаад, амжилтгүй бол хэрэглэгчид мэдэгдэнэ
-function persist() {
-  if (!saveData(data)) {
-    alert('Өгөгдлийг хадгалж чадсангүй. Браузерын тохиргоог шалгана уу.');
+// Supabase-д хадгалах бүх үйлдлийг энэ функцээр дамжуулна.
+// action: async функц. Амжилттай бол true, алдаатай бол монгол мессеж харуулаад false.
+async function save(action) {
+  if (!navigator.onLine) {
+    alert(OFFLINE_MESSAGE);
+    return false;
+  }
+  try {
+    await action();
+    return true;
+  } catch (err) {
+    console.warn('Хадгалах үед алдаа:', err.cause || err);
+    alert(err.message || friendlyError(err));
+    return false;
   }
 }
 
@@ -65,7 +85,145 @@ function makeId() {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
 }
 
-// ===== 2. Таб солих =====
+// JSON текстийг файл болгон татна
+function downloadJson(text, fileName) {
+  const blob = new Blob([text], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = fileName;
+  link.click();
+  // Зарим браузер татаж эхлэхээс өмнө холбоос устаж болох тул бага зэрэг хүлээнэ
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+// ===== 2. Төлвийн мөр: интернэт алга, ачаалж байна, алдаа =====
+const statusBanner = document.getElementById('status-banner');
+const statusText = document.getElementById('status-text');
+const statusRetry = document.getElementById('status-retry');
+const addButton = document.getElementById('add-btn');
+
+// message хоосон бол нууна. onRetry өгвөл «Дахин оролдох» товч гарна.
+function showStatus(message, { error = false, onRetry = null } = {}) {
+  statusText.textContent = message || '';
+  statusBanner.hidden = !message;
+  statusBanner.classList.toggle('error', error);
+  statusRetry.hidden = !onRetry;
+  statusRetry.onclick = onRetry;
+}
+
+// Интернэт тасрах / сэргэхэд (0-р хэсэг, 4-р шийдвэр: «Холболт алга» гэж хэлнэ)
+function updateOnlineState() {
+  const online = navigator.onLine;
+  addButton.disabled = !online;
+  if (!online) {
+    showStatus('Интернэт холболт алга. Өгөгдлийг харж болно, гэхдээ өөрчлөлт хадгалагдахгүй.');
+  } else if (statusText.textContent.startsWith('Интернэт холболт алга')) {
+    showStatus('');
+  }
+}
+window.addEventListener('online', updateOnlineState);
+window.addEventListener('offline', updateOnlineState);
+
+// ===== 3. Нэвтрэлт (имэйлээр нэвтрэх холбоос) =====
+const loginLoading = document.getElementById('login-loading');
+const loginForm = document.getElementById('login-form');
+const loginMessage = document.getElementById('login-message');
+
+function showLoginMessage(text, isError = false) {
+  loginMessage.textContent = text;
+  loginMessage.hidden = !text;
+  loginMessage.classList.toggle('error', isError);
+}
+
+// Нэвтрэх холбоос дарсны дараа энэ хуудас руу буцна (localhost эсвэл GitHub Pages)
+function redirectUrl() {
+  return `${location.origin}${location.pathname}`;
+}
+
+// Холбоосын хугацаа дууссан г.м. алдааг хаягийн «#error=...» хэсгээс уншина
+function readLinkError() {
+  const params = new URLSearchParams(location.hash.slice(1));
+  if (!params.get('error')) return '';
+  history.replaceState(null, '', redirectUrl());  // Хаягийг цэвэрлэнэ
+  return 'Нэвтрэх холбоосын хугацаа дууссан эсвэл аль хэдийн ашиглагдсан байна. Шинэ холбоос хүснэ үү.';
+}
+
+loginForm.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const email = loginForm.elements.email.value.trim();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    showLoginMessage('Имэйл хаягаа зөв бичнэ үү.', true);
+    return;
+  }
+  if (!navigator.onLine) {
+    showLoginMessage('Интернэт холболт алга. Холболтоо шалгаад дахин оролдоно уу.', true);
+    return;
+  }
+
+  const button = loginForm.querySelector('button[type="submit"]');
+  button.disabled = true;
+  showLoginMessage('Илгээж байна…');
+  const { error } = await supabase.auth.signInWithOtp({
+    email,
+    options: { emailRedirectTo: redirectUrl() },
+  });
+  button.disabled = false;
+
+  if (error) {
+    console.warn('Нэвтрэх холбоос илгээж чадсангүй:', error);
+    const tooMany = error.status === 429 || /rate limit/i.test(error.message);
+    showLoginMessage(
+      tooMany
+        ? 'Хэт олон удаа хүслээ. Хэдэн минутын дараа дахин оролдоно уу.'
+        : friendlyError(error).replace('Хадгалж чадсангүй', 'Илгээж чадсангүй'),
+      true
+    );
+    return;
+  }
+  showLoginMessage(`${email} хаяг руу нэвтрэх холбоос илгээлээ. Имэйлдээ ирсэн «Нэвтрэх» товч дээр дарна уу.`);
+});
+
+document.getElementById('logout-btn').addEventListener('click', async () => {
+  if (!confirm('Апп-аас гарах уу?')) return;
+  await supabase.auth.signOut();  // Дараа нь onAuthStateChange нэвтрэх дэлгэц рүү шилжүүлнэ
+});
+
+// Нэвтрэлтийн төлөв өөрчлөгдөх бүрт (хуудас ачаалах, нэвтрэх, гарах) дуудагдана
+async function handleSession(session) {
+  const userId = session?.user?.id ?? null;
+  if (userId === currentUserId && userId !== null) return;  // Токен шинэчлэгдсэн л бол юу ч хийхгүй
+  currentUserId = userId;
+
+  if (!userId) {
+    data = { version: 1, transactions: [], categories: [], budgets: [] };
+    document.body.dataset.auth = 'out';
+    loginLoading.hidden = true;
+    loginForm.hidden = false;
+    showStatus('');
+    return;
+  }
+
+  document.getElementById('account-email').textContent = session.user.email || '';
+  document.body.dataset.auth = 'in';
+  await loadFromCloud();
+}
+
+// Supabase-аас бүх өгөгдлийг ачаална
+async function loadFromCloud() {
+  showStatus('Өгөгдөл ачаалж байна…');
+  try {
+    data = await fetchAllData(supabase);
+    showStatus('');
+    updateOnlineState();
+  } catch (err) {
+    console.warn('Өгөгдөл ачаалж чадсангүй:', err.cause || err);
+    showStatus(err.message, { error: true, onRetry: loadFromCloud });
+  }
+  renderAll();
+}
+
+// ===== 4. Таб солих =====
 const tabButtons = document.querySelectorAll('.tab');
 
 // Сонгосон табыг идэвхжүүлж, бусдыг нууна
@@ -81,7 +239,7 @@ tabButtons.forEach((btn) => {
   btn.addEventListener('click', () => showTab(btn.dataset.tab));
 });
 
-// ===== 3. Сар сонгогч =====
+// ===== 5. Сар сонгогч =====
 // Бүх таб энэ сарын өгөгдлийг харуулна. Анхдаа одоогийн сар.
 let selectedMonth = currentMonth();
 
@@ -93,7 +251,7 @@ function setMonth(month) {
 document.getElementById('month-prev').addEventListener('click', () => setMonth(shiftMonth(selectedMonth, -1)));
 document.getElementById('month-next').addEventListener('click', () => setMonth(shiftMonth(selectedMonth, 1)));
 
-// ===== 4. Хураангуй ба график (F4, F6) =====
+// ===== 6. Хураангуй ба график (F4, F6) =====
 const summaryCards = {
   income: document.getElementById('sum-income'),
   expense: document.getElementById('sum-expense'),
@@ -117,7 +275,7 @@ function renderSummary() {
   renderTransactionList(document.getElementById('recent-list'), null, recent, data.categories, openEditDialog);
 }
 
-// ===== 5. Гүйлгээний жагсаалт ба шүүлт (F7) =====
+// ===== 7. Гүйлгээний жагсаалт ба шүүлт (F7) =====
 const filterType = document.getElementById('filter-type');
 const filterCategory = document.getElementById('filter-category');
 const filterSearch = document.getElementById('filter-search');
@@ -151,7 +309,7 @@ filterType.addEventListener('change', () => {
 filterCategory.addEventListener('change', renderList);
 filterSearch.addEventListener('input', renderList);  // Бичих бүрт шууд хайна
 
-// ===== 6. Төсөв (F5) =====
+// ===== 8. Төсөв (F5) =====
 function renderBudget() {
   renderBudgetList(
     document.getElementById('budget-list'),
@@ -162,7 +320,7 @@ function renderBudget() {
 }
 
 // Хэрэглэгч ангиллын хязгаарыг өөрчлөхөд
-function onLimitChange(categoryId, text) {
+async function onLimitChange(categoryId, text) {
   let limit = null;  // Хоосон бол төсвийг арилгана
   if (text.trim() !== '') {
     limit = parseAmount(text);
@@ -172,29 +330,33 @@ function onLimitChange(categoryId, text) {
       return;
     }
   }
-  data.budgets = setBudget(data.budgets, categoryId, selectedMonth, limit);
-  persist();
-  renderAll();
+  const month = selectedMonth;
+  const ok = await save(() => saveBudget(supabase, categoryId, month, limit));
+  if (ok) data.budgets = setBudget(data.budgets, categoryId, month, limit);
+  renderAll();  // Амжилтгүй бол өмнөх утга буцаж харагдана
 }
 
 // «Өмнөх сарын төсвийг хуулах»
-document.getElementById('copy-budget').addEventListener('click', () => {
-  const prevMonth = shiftMonth(selectedMonth, -1);
-  const prevCount = data.budgets.filter((b) => b.month === prevMonth).length;
-  if (prevCount === 0) {
+document.getElementById('copy-budget').addEventListener('click', async () => {
+  const month = selectedMonth;
+  const prevMonth = shiftMonth(month, -1);
+  const source = data.budgets.filter((b) => b.month === prevMonth);
+  if (source.length === 0) {
     alert(`${formatMonthLabel(prevMonth)}д төсөв тавиагүй байна.`);
     return;
   }
-  const hasCurrent = data.budgets.some((b) => b.month === selectedMonth);
+  const hasCurrent = data.budgets.some((b) => b.month === month);
   if (hasCurrent && !confirm('Энэ сарын төсөв өмнөх сарынхаар солигдоно. Үргэлжлүүлэх үү?')) {
     return;
   }
-  data.budgets = copyBudgets(data.budgets, prevMonth, selectedMonth).budgets;
-  persist();
-  renderAll();
+  const copied = source.map((b) => ({ ...b, month }));
+  if (await save(() => saveBudgets(supabase, copied))) {
+    data.budgets = copyBudgets(data.budgets, prevMonth, month).budgets;
+    renderAll();
+  }
 });
 
-// ===== 7. Ангилал удирдах (F3) =====
+// ===== 9. Ангилал удирдах (F3) =====
 const categoryForm = document.getElementById('category-form');
 const categoryError = document.getElementById('category-error');
 
@@ -214,7 +376,7 @@ function renderSettings() {
 }
 
 // Шинэ ангилал нэмэх
-categoryForm.addEventListener('submit', (event) => {
+categoryForm.addEventListener('submit', async (event) => {
   event.preventDefault();
   const type = categoryForm.elements.type.value;
   const name = categoryForm.elements.name.value.trim();
@@ -223,15 +385,17 @@ categoryForm.addEventListener('submit', (event) => {
     showCategoryError(categoryError, error);
     return;
   }
-  data.categories.push({ id: makeId(), name, type, color: pickCategoryColor(data.categories) });
-  persist();
-  categoryForm.elements.name.value = '';
-  showCategoryError(categoryError, '');
-  renderAll();
+  const category = { id: makeId(), name, type, color: pickCategoryColor(data.categories) };
+  if (await save(() => addCategory(supabase, category))) {
+    data.categories.push(category);
+    categoryForm.elements.name.value = '';
+    showCategoryError(categoryError, '');
+    renderAll();
+  }
 });
 
 // Нэр солих
-function renameCategory(category) {
+async function renameCategory(category) {
   const newName = prompt('Ангиллын шинэ нэр:', category.name);
   if (newName === null) return;  // «Болих» дарсан
   const error = validateCategoryName(newName, category.type, data.categories, category.id);
@@ -239,37 +403,40 @@ function renameCategory(category) {
     alert(error);
     return;
   }
-  category.name = newName.trim();
-  persist();
-  renderAll();
+  const name = newName.trim();
+  if (await save(() => renameCategoryInCloud(supabase, category.id, name))) {
+    category.name = name;
+    renderAll();
+  }
 }
 
-// Устгах — гүйлгээтэй бол зөвшөөрөхгүй
-function deleteCategory(category) {
+// Устгах — гүйлгээтэй бол зөвшөөрөхгүй (сан ч мөн хориглоно)
+async function deleteCategory(category) {
   const count = countCategoryTransactions(data.transactions, category.id);
   if (count > 0) {
     alert(`«${category.name}» ангилалд ${count} гүйлгээ байгаа тул устгах боломжгүй. Эхлээд гүйлгээнүүдийг өөр ангилал руу шилжүүлэх эсвэл устгана уу.`);
     return;
   }
   if (!confirm(`«${category.name}» ангиллыг устгах уу?`)) return;
-  data.categories = data.categories.filter((c) => c.id !== category.id);
-  data.budgets = data.budgets.filter((b) => b.categoryId !== category.id);  // Төсөв нь хамт устана
-  persist();
-  renderAll();
+  if (await save(() => deleteCategoryInCloud(supabase, category.id))) {
+    data.categories = data.categories.filter((c) => c.id !== category.id);
+    data.budgets = data.budgets.filter((b) => b.categoryId !== category.id);  // Сан дээр ч хамт устсан
+    renderAll();
+  }
 }
 
-// ===== 8. Нөөц: JSON татах, оруулах (F8) =====
+// ===== 10. Нөөц: JSON татах, оруулах (F8) =====
 
 // Бүх өгөгдлийг .json файл болгон татна
 document.getElementById('export-btn').addEventListener('click', () => {
-  const blob = new Blob([exportData(data)], { type: 'application/json' });
-  const url = URL.createObjectURL(blob);
-  // Түр холбоос үүсгээд дарснаар браузер файлыг татна
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = backupFileName();
-  link.click();
-  URL.revokeObjectURL(url);
+  downloadJson(exportData(data), backupFileName());
+});
+
+// Өмнөх хувилбарт энэ төхөөрөмжийн localStorage-д хадгалсан өгөгдөл (байвал)
+const legacyBackup = document.getElementById('legacy-backup');
+legacyBackup.hidden = !hasStoredData();
+document.getElementById('legacy-export-btn').addEventListener('click', () => {
+  downloadJson(exportData(loadData()), backupFileName().replace('.json', '-huuchin.json'));
 });
 
 const importFile = document.getElementById('import-file');
@@ -296,14 +463,18 @@ importFile.addEventListener('change', async () => {
   );
   if (!ok) return;
 
+  showStatus('Нөөц оруулж байна…');
+  const saved = await save(() => replaceAllData(supabase, incoming));
+  showStatus('');
+  updateOnlineState();
+  if (!saved) return;  // Алдааны мессежийг save() харуулсан, хуучин өгөгдөл хэвээр
   data = incoming;
-  persist();
   renderAll();
   alert('Нөөцийг амжилттай орууллаа.');
 });
 
-// ===== 9. Бүх өгөгдлийг устгах (давхар баталгаажуулалт) =====
-document.getElementById('reset-btn').addEventListener('click', () => {
+// ===== 11. Бүх өгөгдлийг устгах (давхар баталгаажуулалт) =====
+document.getElementById('reset-btn').addEventListener('click', async () => {
   if (!confirm('Бүх гүйлгээ, төсөв, өөрийн нэмсэн ангилал устана. Үргэлжлүүлэх үү?')) return;
   // Хоёр дахь баталгаа: санамсаргүй дарахаас хамгаална
   const answer = prompt('Итгэлтэй байвал «УСТГАХ» гэж бичнэ үү. Өмнө нь нөөцөө татсан эсэхээ шалгаарай.');
@@ -312,8 +483,9 @@ document.getElementById('reset-btn').addEventListener('click', () => {
     alert('Бичсэн үг таарсангүй. Юу ч устгаагүй.');
     return;
   }
-  data = createDefaultData();
-  persist();
+  const fresh = createDefaultData();  // Анхны 14 ангилалтай хоосон өгөгдөл
+  if (!(await save(() => replaceAllData(supabase, fresh)))) return;
+  data = fresh;
   renderAll();
   alert('Бүх өгөгдлийг устгалаа.');
 });
@@ -328,9 +500,10 @@ function renderAll() {
   renderSettings();
 }
 
-// ===== 10. Гүйлгээ нэмэх / засах / устгах цонх (F1, F2) =====
+// ===== 12. Гүйлгээ нэмэх / засах / устгах цонх (F1, F2) =====
 const dialog = document.getElementById('tx-dialog');
 const form = document.getElementById('tx-form');
+const saveButton = form.querySelector('button[type="submit"]');
 let editingId = null;  // null = шинэ гүйлгээ, эс бөгөөс засаж буй гүйлгээний id
 
 function openAddDialog() {
@@ -348,7 +521,7 @@ function openEditDialog(id) {
   dialog.showModal();
 }
 
-document.getElementById('add-btn').addEventListener('click', openAddDialog);
+addButton.addEventListener('click', openAddDialog);
 document.getElementById('tx-cancel').addEventListener('click', () => dialog.close());
 
 // Орлого/зарлага солиход ангиллын жагсаалт тухайн төрлийнх болно
@@ -362,7 +535,7 @@ form.querySelectorAll('input[name="type"]').forEach((radio) => {
 });
 
 // Хадгалах
-form.addEventListener('submit', (event) => {
+form.addEventListener('submit', async (event) => {
   event.preventDefault();  // Хуудас дахин ачаалагдахаас сэргийлнэ
 
   const raw = readTransactionForm(form);
@@ -373,14 +546,22 @@ form.addEventListener('submit', (event) => {
     return;
   }
 
+  // Хадгалж дуустал товчийг хаана — давхар дарахад давхар гүйлгээ үүсэхгүй
+  saveButton.disabled = true;
+  let ok;
   if (editingId) {
     // Засах: id, createdAt хэвээр, бусад талбарыг шинэчилнэ
     const index = data.transactions.findIndex((t) => t.id === editingId);
-    data.transactions[index] = { ...data.transactions[index], ...values };
+    const updated = { ...data.transactions[index], ...values };
+    ok = await save(() => updateTransaction(supabase, updated));
+    if (ok) data.transactions[index] = updated;
   } else {
-    data.transactions.push({ id: makeId(), ...values, createdAt: new Date().toISOString() });
+    const tx = { id: makeId(), ...values, createdAt: new Date().toISOString() };
+    ok = await save(() => addTransaction(supabase, tx));
+    if (ok) data.transactions.push(tx);
   }
-  persist();
+  saveButton.disabled = false;
+  if (!ok) return;  // Цонх нээлттэй хэвээр — хэрэглэгч дахин оролдож болно
 
   // Гүйлгээ өөр сард бол тэр сар руу шилжинэ — хадгалсан гүйлгээ шууд харагдана
   selectedMonth = values.date.slice(0, 7);
@@ -389,14 +570,31 @@ form.addEventListener('submit', (event) => {
 });
 
 // Устгах — баталгаажуулсны дараа
-document.getElementById('tx-delete').addEventListener('click', () => {
+document.getElementById('tx-delete').addEventListener('click', async () => {
   if (!editingId) return;
   if (!confirm('Энэ гүйлгээг устгах уу? Буцаах боломжгүй.')) return;
-  data.transactions = data.transactions.filter((t) => t.id !== editingId);
-  persist();
+  const id = editingId;
+  if (!(await save(() => deleteTransaction(supabase, id)))) return;
+  data.transactions = data.transactions.filter((t) => t.id !== id);
   dialog.close();
   renderAll();
 });
 
-// ===== 11. Эхний зураг =====
+// ===== 13. Эхлэх =====
 renderAll();
+updateOnlineState();  // Интернэтгүй нээгдсэн бол шууд мэдэгдэнэ
+
+if (!isConfigured) {
+  // Үүлэн Supabase-ийн хаяг, түлхүүрийг js/config.js-д хараахан бичээгүй
+  loginLoading.textContent = 'Апп хараахан тохируулагдаагүй байна (js/config.js).';
+} else {
+  const linkError = readLinkError();
+  // onAuthStateChange нь эхлээд одоогийн төлөвийг (нэвтэрсэн эсэх) нэг удаа дуудна.
+  // Дотор нь Supabase-ийг шууд await хийвэл гацах эрсдэлтэй тул setTimeout-оор салгана.
+  supabase.auth.onAuthStateChange((_event, session) => {
+    setTimeout(async () => {
+      await handleSession(session);
+      if (linkError && !session) showLoginMessage(linkError, true);
+    }, 0);
+  });
+}

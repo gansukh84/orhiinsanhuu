@@ -709,3 +709,92 @@ body {
     right: 24px;
   }
 }
+
+/* ===== Нэвтрэлт ба төлвийн мөр (Supabase) ===== */
+
+/* body[data-auth]: loading | out | in — нэвтрээгүй бол аппын хэсгүүдийг нууна */
+body:not([data-auth="in"]) .month-picker,
+body:not([data-auth="in"]) .tabs,
+body:not([data-auth="in"]) .content,
+body:not([data-auth="in"]) .fab {
+  display: none;
+}
+
+body[data-auth="in"] .login-screen {
+  display: none;
+}
+
+.login-screen {
+  max-width: 420px;
+  margin: 0 auto;
+  padding: 24px 16px;
+}
+
+.login-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.login-form[hidden] {
+  display: none;
+}
+
+.login-form h2 {
+  margin: 0;
+  font-size: 1.2rem;
+}
+
+.login-message {
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: #f0fdf4;
+  color: var(--income);
+  font-size: 0.95rem;
+}
+
+.login-message.error {
+  background: #fef2f2;
+  color: var(--expense);
+}
+
+.login-message[hidden] {
+  display: none;
+}
+
+/* Интернэт алга, ачаалж байна, алдаа */
+.status-banner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 8px 16px;
+  background: #fffbeb;
+  color: #92400e;
+  font-size: 0.9rem;
+  text-align: center;
+}
+
+.status-banner.error {
+  background: #fef2f2;
+  color: var(--expense);
+}
+
+.status-banner[hidden] {
+  display: none;
+}
+
+/* Интернэтгүй үед «+» товч бүдэг */
+.fab:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.legacy-backup {
+  margin-top: 12px;
+}
+
+.legacy-backup[hidden] {
+  display: none;
+}
