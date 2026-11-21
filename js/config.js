@@ -16,11 +16,10 @@ const LOCAL = {
   key: 'sb_publishable_ACJWlzQHlZjBrEguHvfOxg_3BJgxAaH',
 };
 
-// Үүлэн орчин: Supabase сайт → Project Settings → API Keys
-// TODO: Project URL болон publishable (anon) түлхүүрээр солих
+// Үүлэн орчин: Supabase сайт → Project Settings → API Keys (төсөл: orhiin-sanhuu)
 const CLOUD = {
-  url: 'https://YOUR-PROJECT-ID.supabase.co',
-  key: 'YOUR-PUBLISHABLE-KEY',
+  url: 'https://fikjwcqljbndgfjvpsvp.supabase.co',
+  key: 'sb_publishable_JajOCMuXkDm8BYLH8J2qqg_R2wyAfqd',
 };
 
 export const isLocal = ['localhost', '127.0.0.1'].includes(location.hostname);
