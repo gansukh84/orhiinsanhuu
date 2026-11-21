@@ -207,6 +207,25 @@
     </form>
   </dialog>
 
-  <script type="module" src="js/app.js"></script>
+  <!-- Апп. Supabase сан гадны CDN-ээс ачаалагддаг тул ачаалагдаж чадахгүй бол onerror ажиллана. -->
+  <script type="module" src="js/app.js" onerror="showLoadError()"></script>
+
+  <!-- Апп ачаалагдаагүй үед «Ачаалж байна…» дээр гацахгүйн тулд монгол мессеж харуулна.
+       Энэ нь энгийн (module биш) скрипт тул гадны сан ачаалагдаагүй ч ажиллана. -->
+  <script>
+    function showLoadError() {
+      if (window.appReady) return;  // Апп аль хэдийн эхэлсэн бол юу ч хийхгүй
+      var box = document.getElementById('login-loading');
+      box.textContent = 'Апп ачаалагдсангүй. Интернэт холболтоо шалгаад дахин оролдоно уу. ';
+      var retry = document.createElement('button');
+      retry.type = 'button';
+      retry.className = 'btn btn-small';
+      retry.textContent = 'Дахин ачаалах';
+      retry.onclick = function () { location.reload(); };
+      box.appendChild(retry);
+    }
+    // Сүлжээ удаан байж 20 секундэд эхлээгүй бол ч мөн мэдэгдэнэ
+    setTimeout(showLoadError, 20000);
+  </script>
 </body>
 </html>

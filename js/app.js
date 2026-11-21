@@ -57,6 +57,10 @@ import {
 } from './ui.js';
 import { renderCategoryChart, renderTrendChart } from './charts.js';
 
+// Энд хүрсэн бол бүх модуль (Supabase сан ч) амжилттай ачаалагдсан.
+// index.html дахь «Апп ачаалагдсангүй» мессеж гарахгүй болно.
+window.appReady = true;
+
 // ===== 1. Өгөгдөл ба хадгалалт =====
 // Нэвтэрсэн хэрэглэгчийн өгөгдөл (Supabase-аас ачаалсны дараа дүүрнэ)
 let data = { version: 1, transactions: [], categories: [], budgets: [] };
